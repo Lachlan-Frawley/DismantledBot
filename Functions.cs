@@ -28,10 +28,12 @@ namespace DismantledBot
         {
             public const string CREATOR_ID_FUNC = "cidf";
             public const string GET_OWNER_ID_FUNC = "goidf";
+            public const string OFFICER_ROLE_FUNC = "orf";
         }
 
         public static class Implementations
         {
+            public static Func<ulong> OFFICER_ROLE_FUNC = () => 740394363858976818;
             public static Func<ulong> CREATOR_ID_FUNC = () => 216098427317125120;
             public static Func<ulong> GET_OWNER_ID_FUNC = () =>
             {

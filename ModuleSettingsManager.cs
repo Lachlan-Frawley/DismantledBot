@@ -8,7 +8,7 @@ using System.Globalization;
 
 namespace DismantledBot
 {
-    public sealed class ModuleSettingsManager<T> where T : ModuleBase<SocketCommandContext>
+    public sealed class ModuleSettingsManager<T>
     {
         private static ModuleSettingsManager<T> instancedSettings = null;
 
@@ -84,6 +84,8 @@ namespace DismantledBot
             if (File.Exists(GetPath()))
             {
                 data = JsonConvert.DeserializeObject<Dictionary<string, object>>(File.ReadAllText(GetPath()));
+                if (data == null)
+                    data = new Dictionary<string, object>();
             }
             else
             {

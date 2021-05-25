@@ -12,8 +12,8 @@ namespace DismantledBot
         public static void Main(string[] args)
             => new CoreProgram().MainAsync().GetAwaiter().GetResult();
 
-        private DiscordSocketClient client;
-        public static BotControl settings = BotControl.Load("config.json");
+        public static DiscordSocketClient client { get; private set; }
+        public static BotControl settings { get; private set; } = BotControl.Load("config.json");        
 
         public async Task MainAsync()
         {
@@ -22,7 +22,8 @@ namespace DismantledBot
             client = new DiscordSocketClient(new DiscordSocketConfig()
             {
                 AlwaysDownloadUsers = true,
-                LargeThreshold = 250               
+                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.GuildMessages | GatewayIntents.Guilds,
+                LargeThreshold = 250
             });
             client.Log += Log;
 
@@ -35,8 +36,9 @@ namespace DismantledBot
             client.Ready += () =>
             {
                 Console.WriteLine("Bot running....");
+                WarUtility.OnBotStart();
                 return Task.CompletedTask;
-            };
+            };          
 
             await Task.Delay(-1);
         }
