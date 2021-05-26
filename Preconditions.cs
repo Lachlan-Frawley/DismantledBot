@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 namespace DismantledBot
 {
+    // Forces a command to fail
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     public sealed class ForceFailureAttribute : PreconditionAttribute
     {
@@ -16,15 +17,17 @@ namespace DismantledBot
         }
     }
 
+    // Checks if command is run by the bot creator
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     public sealed class IsCreatorAttribute : PreconditionAttribute
     {
         public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
         {
-            return Task.FromResult(context.User.Id == 216098427317125120 ? PreconditionResult.FromSuccess() : PreconditionResult.FromError("User is not bot creator"));
+            return Task.FromResult(context.User.Id == Functions.Implementations.CREATOR_ID_FUNC() ? PreconditionResult.FromSuccess() : PreconditionResult.FromError("User is not bot creator"));
         }
     }
 
+    // Checks if a command is run by a user, or set of users
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     public sealed class IsUserAttribute : PreconditionAttribute
     {
@@ -41,6 +44,7 @@ namespace DismantledBot
         }
     }
 
+    // Checks if a command is run by a user with a minimum role
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     public sealed class HasMinimumRoleAttribute : PreconditionAttribute
     {
@@ -64,6 +68,7 @@ namespace DismantledBot
         }
     }
 
+    // Checks if a command is run by someone with a certain role
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     public sealed class HasRoleAttribute : PreconditionAttribute
     {

@@ -8,8 +8,10 @@ using System.Globalization;
 
 namespace DismantledBot
 {
+    // Some fuckin settings stuff
     public sealed class ModuleSettingsManager<T>
     {
+        // Each type is an instanced singleton
         private static ModuleSettingsManager<T> instancedSettings = null;
 
         public static ModuleSettingsManager<T> MakeSettings()

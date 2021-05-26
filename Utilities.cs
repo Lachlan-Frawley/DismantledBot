@@ -31,6 +31,8 @@ namespace DismantledBot
                 this.m_dueTime = DateTime.Now.AddMilliseconds(this.Interval);
         }
     }
+
+    // Some utilities
     public static class Utilities
     {
         private static Random Random = new Random();
@@ -45,6 +47,7 @@ namespace DismantledBot
             return self.OrderBy(x => FuzzyMatch(compare, x)).ToList();
         }
 
+        // Find the edit distance between 2 strings via the full matrix method
         public static int FuzzyMatch(string original, string comparedTo)
         {
             int l1 = original.Length;

@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 
 namespace DismantledBot
 {
+    // Some stuff
     public static class Functions
     {
         public static Func<T> GetFunc<T>(string name)
