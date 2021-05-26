@@ -117,8 +117,8 @@ namespace DismantledBot
             SocketGuild guild = CoreProgram.client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY));
             SocketTextChannel eventChannel = guild.GetTextChannel(BindingModule.settings.GetData<ulong>(BindingModule.BINDING_SIGNUP_KEY));
             List<IMessage> eventMessages = (await eventChannel.GetMessagesAsync().FlattenAsync()).ToList();
-            IMessage selectedMessage = eventMessages.Where(x => nwRegex.Matches(x.Embeds.First().Description).Count != 0).Where(x => x.Embeds.First().Description.Contains(WarDay.ToString(), StringComparison.InvariantCultureIgnoreCase)).First();
-
+            // This works
+            IMessage selectedMessage = eventMessages.Where(x => nwRegex.Matches(x.Embeds.First().Description).Count != 0).Where(x => x.Embeds.Any(y => y.Title.Contains(WarDay.ToString(), StringComparison.InvariantCultureIgnoreCase))).First();
             IEmbed targetEmbed = selectedMessage.Embeds.First();
             EmbedField targetField = targetEmbed.Fields[2];
 
@@ -266,56 +266,62 @@ namespace DismantledBot
                 IEmbed embed = message.Embeds.First();
 
                 // TODO
-                if (nwRegex.Matches(embed.Description).Count == 0 || embed.Fields.Length == 0)
+                if (nwRegex.Matches(embed.Title).Count == 0 || embed.Fields.Length == 0)
                     continue;
 
-                EmbedField timeField = embed.Fields[0];
-                Match timeData = timeRegex.Match(timeField.Value);
-                GroupCollection groups = timeData.Groups;
-                Group foundGroup;
-
-                // God why
-                groups.TryGetValue("DAY", out foundGroup);
-                string day = foundGroup.Value;
-                groups.TryGetValue("MONTH", out foundGroup);
-                string month = foundGroup.Value;
-                groups.TryGetValue("DNUM", out foundGroup);
-                string dayNumber = foundGroup.Value;
-                groups.TryGetValue("YEAR", out foundGroup);
-                string year = foundGroup.Value;
-                groups.TryGetValue("HOUR", out foundGroup);
-                string hour = foundGroup.Value;
-                groups.TryGetValue("MINUTE", out foundGroup);
-                string minutes = foundGroup.Value;
-                groups.TryGetValue("ZONE", out foundGroup);
-                string timeZone = foundGroup.Value;
-                groups.TryGetValue("REL", out foundGroup);
-                string relativeTimeZone = foundGroup.Value;
-                groups.TryGetValue("OFSS", out foundGroup);
-                string offsetSign = foundGroup.Value;
-                groups.TryGetValue("OFSN", out foundGroup);
-                string offsetNumber = foundGroup.Value;
-
-                int dyear = int.Parse(year);
-                int dmonth = DateTime.ParseExact(month, "MMMM", CultureInfo.CurrentCulture).Month;
-                int dday = int.Parse(dayNumber);
-                int dhour = int.Parse(hour);
-                int dmin = int.Parse(minutes);
-
-                DateTime nwTime = new DateTime(dyear, dmonth, dday, dhour, dmin, 0, DateTimeKind.Utc);
-                TimeSpan timeUntil = nwTime - DateTime.UtcNow;
-                while(timeUntil.Ticks <= 0)
+                try
                 {
-                    nwTime = nwTime.AddDays(7);
-                    timeUntil = DateTime.UtcNow - nwTime;
+                    EmbedField timeField = embed.Fields[0];
+                    Match timeData = timeRegex.Match(timeField.Value);
+                    GroupCollection groups = timeData.Groups;
+                    Group foundGroup;
+
+                    // God why
+                    groups.TryGetValue("DAY", out foundGroup);
+                    string day = foundGroup.Value;
+                    groups.TryGetValue("MONTH", out foundGroup);
+                    string month = foundGroup.Value;
+                    groups.TryGetValue("DNUM", out foundGroup);
+                    string dayNumber = foundGroup.Value;
+                    groups.TryGetValue("YEAR", out foundGroup);
+                    string year = foundGroup.Value;
+                    groups.TryGetValue("HOUR", out foundGroup);
+                    string hour = foundGroup.Value;
+                    groups.TryGetValue("MINUTE", out foundGroup);
+                    string minutes = foundGroup.Value;
+                    groups.TryGetValue("ZONE", out foundGroup);
+                    string timeZone = foundGroup.Value;
+                    groups.TryGetValue("REL", out foundGroup);
+                    string relativeTimeZone = foundGroup.Value;
+                    groups.TryGetValue("OFSS", out foundGroup);
+                    string offsetSign = foundGroup.Value;
+                    groups.TryGetValue("OFSN", out foundGroup);
+                    string offsetNumber = foundGroup.Value;
+
+                    int dyear = int.Parse(year);
+                    int dmonth = DateTime.ParseExact(month, "MMM", CultureInfo.CurrentCulture).Month;
+                    int dday = int.Parse(dayNumber);
+                    int dhour = int.Parse(hour);
+                    int dmin = int.Parse(minutes);
+
+                    DateTime nwTime = new DateTime(dyear, dmonth, dday, dhour, dmin, 0, DateTimeKind.Utc);
+                    TimeSpan timeUntil = nwTime - DateTime.UtcNow;
+                    while (timeUntil.Ticks <= 0)
+                    {
+                        nwTime = nwTime.AddDays(7);
+                        timeUntil = nwTime - DateTime.UtcNow;
+                    }
+
+                    int warOffsetTime = int.Parse(offsetNumber);
+                    if (offsetSign.Equals("+"))
+                        warOffsetTime *= -1;
+
+                    settings.SetData($"{SAVED_TIME_PREFIX}{warNum}", warOffsetTime);
+                    settings.SetData($"{SAVED_WAR_PREFIX}{warNum++}", nwTime);
+                } catch
+                {
+                    continue;
                 }
-
-                int warOffsetTime = int.Parse(offsetNumber);
-                if (offsetSign.Equals("+"))
-                    warOffsetTime *= -1;
-
-                settings.SetData($"{SAVED_TIME_PREFIX}{warNum}", warOffsetTime);
-                settings.SetData($"{SAVED_WAR_PREFIX}{warNum++}", nwTime);         
             }
 
             settings.SetData(WAR_COUNT_KEY, warNum);
