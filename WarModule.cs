@@ -290,6 +290,7 @@ namespace DismantledBot
 
         // Forceably start recording war
         [Command("force_start")]
+        [Summary("Force starts the next war")]
         [HasRole(Functions.Names.OFFICER_ROLE_FUNC)]
         public async Task ForceWarStart()
         {
@@ -300,8 +301,9 @@ namespace DismantledBot
 
         // Forceably end war
         [Command("force_end")]
+        [Summary("Forceably ends current war, takes attendance, and shifts the war timer ahead one week")]
         [HasRole(Functions.Names.OFFICER_ROLE_FUNC)]
-        public async Task ForceWarEnd(bool isTest = false)
+        public async Task ForceWarEnd([Summary("If true, does not push the current war timer ahead one week")]bool isTest = false)
         {
             await ReplyAsync("Forcing war end...");
             // Make sure war time isnt pushed forward if this is a test
@@ -313,6 +315,7 @@ namespace DismantledBot
         // Gather nodewar event data and save it
         // Good luck working out what happens here
         [Command("calibrate", RunMode = RunMode.Async)]
+        [Summary("Reads the event data from the bound event signup channel and saves it for reference")]
         [IsUser(Functions.Names.CREATOR_ID_FUNC, Functions.Names.GET_OWNER_ID_FUNC)]
         public async Task CalibrateWarTimes()
         {
@@ -398,6 +401,7 @@ namespace DismantledBot
         
         // Time until next nodewar
         [Command("next")]
+        [Summary("Prints the time until the next nodewar, and what channel it is on (if thats known)")]
         public async Task FindNextWar()
         {
             TimerPlus untilNext = typeof(WarUtility).GetField("UntilWarTimer", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null) as TimerPlus;
@@ -412,8 +416,9 @@ namespace DismantledBot
 
         // Set next nw channel
         [Command("channel")]
+        [Summary("Sets the nodewar channel")]
         [HasRole(Functions.Names.OFFICER_ROLE_FUNC)]
-        public async Task SetWarChannel(WarChannel channel)
+        public async Task SetWarChannel([Summary("Valid Channels: Balenos, Serendia, Calpheon, Media, Valencia (case insensitive)")]WarChannel channel)
         {
             settings.SetData(CHAN_SET_KEY, true);
             settings.SetData(WAR_CHAN_KEY, channel);

@@ -4,6 +4,8 @@ using Discord.WebSocket;
 using System;
 using System.Reflection;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DismantledBot
 {
@@ -52,6 +54,8 @@ namespace DismantledBot
 
     public class CommandHandler
     {
+        public static List<ModuleInfo> Modules { get; private set; }
+
         private readonly DiscordSocketClient client;
         private readonly CommandService commands;
 
@@ -64,7 +68,7 @@ namespace DismantledBot
         public async Task InstallCommandsAsync()
         {
             client.MessageReceived += Client_MessageReceived;
-            await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null);
+            Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
         }
 
         private async Task Client_MessageReceived(SocketMessage arg)
