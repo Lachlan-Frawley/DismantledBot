@@ -62,6 +62,20 @@ namespace DismantledBot
             }
         }
 
+        public P GetDataOrDefault<P>(string key, P def)
+        {
+            try
+            {
+                return data.TryGetValue(key, out object value) ? (value == null ? def : (P)Convert.ChangeType(value, typeof(P), CultureInfo.InvariantCulture)) : default;
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e.Message);
+                Console.Error.WriteLine(e.StackTrace);
+                throw e;
+            }
+        }
+
         public P GetData<P>(string key)
         {
             try

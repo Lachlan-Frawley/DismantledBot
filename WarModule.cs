@@ -25,6 +25,7 @@ namespace DismantledBot
 
         // Required data
         private static List<string> Attendance;
+        private static List<string> SignupList;
         private static DayOfWeek WarDay;
         private static DateTime WarDT;
         private static int WarIndex;
@@ -40,6 +41,7 @@ namespace DismantledBot
             WarTimer = null;
             AttendanceTimer = null;
             Attendance = null;
+            SignupList = null;
             WarIndex = -1;
 
             // Get next war
@@ -74,8 +76,24 @@ namespace DismantledBot
         // Called 30 mins before nodewar starts
         private static async void UntilWarTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
+            WarModule.settings.SetData(WarModule.LAST_WAR_CHAN_KEY, WarModule.settings.GetDataOrDefault(WarModule.WAR_CHAN_KEY, WarModule.WarChannel.NULL));
+            WarModule.settings.SetData(WarModule.WAR_CHAN_KEY, null);
+            WarModule.settings.SetData(WarModule.CHAN_SET_KEY, false);
+
             UntilWarTimer.Stop();
-            
+
+            // Get selected event signup list
+            Regex nwRegex = new Regex(WarModule.NODEWAR_REGEX);
+            SocketGuild guild = CoreProgram.client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY));
+            SocketTextChannel eventChannel = guild.GetTextChannel(BindingModule.settings.GetData<ulong>(BindingModule.BINDING_SIGNUP_KEY));
+            List<IMessage> eventMessages = (await eventChannel.GetMessagesAsync().FlattenAsync()).ToList();
+            IMessage selectedMessage = eventMessages.Where(x => nwRegex.Matches(x.Embeds.First().Description).Count != 0).Where(x => x.Embeds.Any(y => y.Title.Contains(WarDay.ToString(), StringComparison.InvariantCultureIgnoreCase))).First();
+            IEmbed targetEmbed = selectedMessage.Embeds.First();
+            EmbedField targetField = targetEmbed.Fields[2];
+
+            // Get all signed up names and everyone in channel
+            SignupList = WarModule.ExtractNamesFromEmbed(targetField.Value);
+
             // Setup timers for whole war (2hrs, 30 mins)
             WarTimer = new TimerPlus()
             {
@@ -97,8 +115,7 @@ namespace DismantledBot
             AttendanceTimer.Start();
             IsRecordingWar = true;            
 
-            // Send message to war discussion channel
-            SocketGuild guild = CoreProgram.client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY));
+            // Send message to war discussion channel           
             SocketTextChannel wardisc = guild.GetTextChannel(BindingModule.settings.GetData<ulong>(BindingModule.BINDING_WARDISC_KEY));
 
             await wardisc.SendMessageAsync($"Now recording attendance for {WarDay} Nodewar [{WarDT.ToShortDateString()}]");
@@ -124,8 +141,10 @@ namespace DismantledBot
         {
             // Print war data
             IsRecordingWar = false;
-            AttendanceTimer.Stop();
-            WarTimer.Stop();
+            if(AttendanceTimer != null)
+                AttendanceTimer.Stop();
+            if(WarTimer != null)
+                WarTimer.Stop();
             // Take attendance one more time
             AttendanceTimer_Elapsed(null, null);
 
@@ -139,13 +158,12 @@ namespace DismantledBot
             EmbedField targetField = targetEmbed.Fields[2];
 
             // Get all signed up names and everyone in channel
-            List<string> signupNames = WarModule.ExtractNamesFromEmbed(targetField.Value);
             List<string> namesInChannels = Attendance;
 
             // What names are common between the attendance and signup
-            List<string> commonNames = signupNames.Intersect(namesInChannels).ToList();
+            List<string> commonNames = SignupList.Intersect(namesInChannels).ToList();
             // Who has attended but not signed up?
-            List<string> attendedButNotSignedUp = namesInChannels.Except(signupNames).ToList();
+            List<string> attendedButNotSignedUp = namesInChannels.Except(SignupList).ToList();
 
             // All guild members by nickname and username
             List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
@@ -174,7 +192,7 @@ namespace DismantledBot
 
             // Work out missing names by fuzzy matching if needed
             Console.WriteLine("Reading Missing Names...");
-            foreach (string name in signupNames.Except(namesInChannels))
+            foreach (string name in SignupList.Except(namesInChannels))
             {
                 if (missingName.Contains(name))
                     continue;
@@ -220,6 +238,16 @@ namespace DismantledBot
     [Group("war")]
     public class WarModule : ModuleBase<SocketCommandContext>
     {
+        public enum WarChannel
+        {
+            Balenos,
+            Serendia,
+            Calpheon,
+            Mediah,
+            Valencia,
+            NULL
+        }
+
         // Regexs
         public const string TIME_EXTRACT_REGEX = @"(?<DAY>[A-Za-z]*) (?<MONTH>[A-Za-z]*) (?<DNUM>[0-9]*)(th|st|nd|rd), (?<YEAR>[0-9]*) .* (?<HOUR>[0-9]*):(?<MINUTE>[0-9]*) (?<ZONE>[A-Z]*) \((?<REL>[A-Z]*)(?<OFSS>\+|-)(?<OFSN>[0-9]*)\)";
         public const string NODEWAR_REGEX = @"(n|N)(o|O)(d|D)(e|E) (w|W)(a|A)(r|R)";
@@ -229,6 +257,9 @@ namespace DismantledBot
         public const string SAVED_TIME_PREFIX = "WTO_";
         public const string WAR_COUNT_KEY = "WCK";
         public const string SERVER_ID_KEY = "SIDK";
+        public const string WAR_CHAN_KEY = "WCH";
+        public const string CHAN_SET_KEY = "WCSK";
+        public const string LAST_WAR_CHAN_KEY = "LWCK";
 
         public static ModuleSettingsManager<WarModule> settings = ModuleSettingsManager<WarModule>.MakeSettings();
 
@@ -373,7 +404,20 @@ namespace DismantledBot
             double toNext = untilNext != null ? untilNext.TimeLeft : -1;
             // Format it to look pretty :)
             string untilNextFormatted = string.Format("{0:%d} day(s), {0:%h} hours, {0:%m} minutes", new TimeSpan(0, 0, 0, 0, (int)toNext));
-            await ReplyAsync($"Time until next War: {untilNextFormatted}");
+            string warChannel = settings.GetData<bool>(CHAN_SET_KEY) ? $", Channel: {settings.GetDataOrDefault(WAR_CHAN_KEY, WarChannel.NULL)} 1" : "";
+            if (settings.GetDataOrDefault(WAR_CHAN_KEY, WarChannel.NULL) == WarChannel.NULL)
+                warChannel = ", Channel is not set";
+            await ReplyAsync($"Time until next War: {untilNextFormatted}{warChannel}");
+        }
+
+        // Set next nw channel
+        [Command("channel")]
+        [HasRole(Functions.Names.OFFICER_ROLE_FUNC)]
+        public async Task SetWarChannel(WarChannel channel)
+        {
+            settings.SetData(CHAN_SET_KEY, true);
+            settings.SetData(WAR_CHAN_KEY, channel);
+            await ReplyAsync($"Set next war channel to [{channel}]");
         }
 
         // Debug commands
@@ -381,6 +425,16 @@ namespace DismantledBot
         [IsCreator]
         public class DebugModule : ModuleBase<SocketCommandContext>
         {
+            [Command("test_next")]
+            public async Task TestNextWar()
+            {
+                await ReplyAsync("Executing Test War...");
+                WarUtility.OnBotStart();
+                typeof(WarUtility).GetMethod("UntilWarTimer_Elapsed", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { this, null });
+                WarUtility.IsTest = true;
+                typeof(WarUtility).GetMethod("WarTimer_Elapsed", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { this, null });
+            }
+
             // Print timer data in console
             [Command("timer_check")]
             public Task TimerCheck()
