@@ -32,6 +32,11 @@ namespace DismantledBot
 
         private Dictionary<string, object> data;
 
+        public void Clear()
+        {
+            instancedSettings.Clear();
+        }
+
         public void SetData(string key, object value, bool save = true)
         {
             if(data.ContainsKey(key))

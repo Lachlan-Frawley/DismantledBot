@@ -29,6 +29,7 @@ namespace DismantledBot
             public const string CREATOR_ID_FUNC = "cidf";
             public const string GET_OWNER_ID_FUNC = "goidf";
             public const string OFFICER_ROLE_FUNC = "orf";
+            public const string MEMBER_ROLE_FUNC = "mrf";
         }
 
         public static class Implementations
@@ -37,10 +38,13 @@ namespace DismantledBot
             public static Func<ulong> CREATOR_ID_FUNC = () => 216098427317125120;
             public static Func<ulong> GET_OWNER_ID_FUNC = () =>
             {
-                ModuleSettingsManager<BindingModule> bindSettings = ModuleSettingsManager<BindingModule>.MakeSettings();
-                ulong ownerID = bindSettings.GetData<ulong>(BindingModule.BINDING_OWNER_KEY);
+                ulong ownerID = BindingModule.settings.GetData<ulong>(BindingModule.BINDING_OWNER_KEY);
 
                 return ownerID == 0 ? CREATOR_ID_FUNC() : ownerID;
+            };
+            public static Func<ulong> MEMBER_ROLE_FUNC = () =>
+            {
+                return BindingModule.settings.GetData<ulong>(BindingModule.BINDING_GMEMBER_KEY);
             };
         }
     }

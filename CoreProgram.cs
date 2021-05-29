@@ -39,6 +39,7 @@ namespace DismantledBot
             {
                 Console.WriteLine("Bot running....");
                 WarUtility.OnBotStart();
+                MissionModule.OnBotStart();
                 return Task.CompletedTask;
             };          
 

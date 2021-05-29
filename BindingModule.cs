@@ -15,6 +15,8 @@ namespace DismantledBot
         public const string BINDING_WARCAT_KEY = "war_category";
         public const string BINDING_WARDISC_KEY = "wdisk_key";
         public const string BINDING_GMEMBER_KEY = "guildmem_key";
+        public const string BINDING_MISSION_KEY = "mission_key";
+        public const string BINDING_MISEMOJI_KEY = "godwhy_key";
 
         public static ModuleSettingsManager<BindingModule> settings = ModuleSettingsManager<BindingModule>.MakeSettings();
 
@@ -33,6 +35,15 @@ namespace DismantledBot
             Console.WriteLine();
 
             await ReplyAsync($"DEBUG FROM [{GetType().FullName} - {Utilities.GetMethod()}]");
+        }
+
+        [Command("missions")]
+        [Summary("Binds the guild missions channel")]
+        [IsUser(Functions.Names.CREATOR_ID_FUNC, Functions.Names.GET_OWNER_ID_FUNC)]
+        public async Task BindMissions(ulong id)
+        {
+            settings.SetData(BINDING_MISSION_KEY, id);
+            await ReplyAsync("Mission channel bound successfully!");
         }
 
         // Binds the server owner
@@ -83,6 +94,16 @@ namespace DismantledBot
         {
             settings.SetData(BINDING_GMEMBER_KEY, id);
             await ReplyAsync("Guild Member Role bound successfully!");
+        }
+
+        // Binds the 'mission complete' emoji
+        [Command("mission_emoji")]
+        [Summary("Binds the mission completion emoji")]
+        [IsUser(Functions.Names.CREATOR_ID_FUNC, Functions.Names.GET_OWNER_ID_FUNC)]
+        public async Task BindMissionEmoji(ulong id)
+        {
+            settings.SetData(BINDING_MISEMOJI_KEY, id);
+            await ReplyAsync("Mission completion emoji bound!");
         }
     }
 }
