@@ -1,8 +1,6 @@
-﻿using System.Linq;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using Discord.Commands;
-using System.Text;
 using Discord;
 using Discord.WebSocket;
 using System;
@@ -68,6 +66,7 @@ namespace DismantledBot
                 Console.WriteLine($"Server: {server} {channel}, ID: {id}");
             }
             Console.WriteLine();
+            await ReplyAsync($"DEBUG FROM [{GetType().FullName} - {Utilities.GetMethod()}]");
         }
 
         [Command("register")]

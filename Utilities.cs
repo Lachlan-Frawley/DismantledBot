@@ -2,6 +2,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Linq;
+using Discord.WebSocket;
 
 namespace DismantledBot
 {
@@ -36,6 +37,41 @@ namespace DismantledBot
     public static class Utilities
     {
         private static Random Random = new Random();
+
+        public static string MatchName(string name, SocketGuild guild)
+        {
+            List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
+
+            if(allGuildMembers.Any(x => name.Equals(x.Item1) || name.Equals(x.Item2)))
+            {
+                return name;
+            }
+
+            return FuzzySearch(allGuildMembers.Select(x => x.Item1).Union(allGuildMembers.Select(x => x.Item2)), name).First();
+        }
+
+        public static List<string> MatchNames(IEnumerable<string> names, SocketGuild guild)
+        {
+            List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
+            List<string> flatMembers = allGuildMembers.Select(x => x.Item1).Union(allGuildMembers.Select(x => x.Item2)).ToList();
+
+            List<string> MatchedNames = new List<string>();
+            foreach(string name in names)
+            {
+                if (MatchedNames.Contains(name))
+                    continue;
+
+                if(flatMembers.Contains(name))
+                {
+                    MatchedNames.Add(name);
+                }
+                else
+                {
+                    MatchedNames.Add(FuzzySearch(flatMembers, name).First());
+                }
+            }
+            return MatchedNames;
+        }
 
         public static int PMod(int x, int m)
         {

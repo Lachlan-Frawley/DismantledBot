@@ -24,11 +24,11 @@ namespace DismantledBot
         private static TimerPlus AttendanceTimer;
 
         // Required data
-        private static List<string> Attendance;
-        private static List<string> SignupList;
-        private static DayOfWeek WarDay;
-        private static DateTime WarDT;
-        private static int WarIndex;
+        public static List<string> Attendance { get; private set; }
+        public static List<string> SignupList { get; private set; }
+        public static DayOfWeek WarDay { get; private set; }
+        public static DateTime WarDT { get; private set; }
+        public static int WarIndex { get; private set; }
 
         // Flag if this is a test (wont' change saved war schedule if true)
         public static bool IsTest = false;
@@ -168,47 +168,9 @@ namespace DismantledBot
             // All guild members by nickname and username
             List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
 
-            List<string> attended = new List<string>();
-            List<string> missingName = new List<string>();
-
-            // Work out attending names by fuzzy matching if needed
-            Console.WriteLine("Reading Attending Names...");
-            foreach (string name in commonNames.Union(attendedButNotSignedUp))
-            {
-                if (attended.Contains(name))
-                    continue;
-
-                if (allGuildMembers.Any(x => x.Item1.Equals(name, StringComparison.InvariantCultureIgnoreCase) || x.Item2.Equals(name, StringComparison.InvariantCultureIgnoreCase)))
-                {
-                    attended.Add(name);
-                }
-                else
-                {
-                    List<string> fuzzy = Utilities.FuzzySearch(allGuildMembers.Select(x => x.Item1).Union(allGuildMembers.Select(x => x.Item2)), name);
-                    Console.WriteLine($"Couldn't find name [{name}], substituting with [{fuzzy.First()}]");
-                    attended.Add(fuzzy.First());
-                }
-            }
-
-            // Work out missing names by fuzzy matching if needed
-            Console.WriteLine("Reading Missing Names...");
-            foreach (string name in SignupList.Except(namesInChannels))
-            {
-                if (missingName.Contains(name))
-                    continue;
-
-                if (allGuildMembers.Any(x => x.Item1.Equals(name, StringComparison.InvariantCultureIgnoreCase) || x.Item2.Equals(name, StringComparison.InvariantCultureIgnoreCase)))
-                {
-                    missingName.Add(name);
-                }
-                else
-                {
-                    List<string> fuzzy = Utilities.FuzzySearch(allGuildMembers.Select(x => x.Item1).Union(allGuildMembers.Select(x => x.Item2)), name);
-                    Console.WriteLine($"Couldn't find name [{name}], substituting with [{fuzzy.First()}]");
-                    missingName.Add(fuzzy.First());
-                }
-            }
-
+            List<string> attended = Utilities.MatchNames(commonNames.Union(attendedButNotSignedUp), guild);
+            List<string> missingName = Utilities.MatchNames(SignupList.Except(namesInChannels), guild);
+          
             // Build an embed for the message
             EmbedBuilder builder = new EmbedBuilder();
             builder.Description = $"{WarDay} War Attendance [{WarDT.ToShortDateString()}]";
@@ -286,6 +248,30 @@ namespace DismantledBot
         {
             SocketRole selectedRole = guild.GetRole(BindingModule.settings.GetData<ulong>(BindingModule.BINDING_GMEMBER_KEY));
             return guild.Users.Where(x => x.Roles.Contains(selectedRole)).Select(x => (string.IsNullOrEmpty(x.Nickname) ? "" : x.Nickname, x.Username)).ToList();
+        }
+
+        [Command("extras")]
+        [Summary("Lists those who are in the war channel but not signed up for war")]
+        [HasRole(Functions.Names.OFFICER_ROLE_FUNC)]
+        public async Task ExtraAttendance()
+        {
+            if(!WarUtility.IsRecordingWar)
+            {
+                await UserExtensions.SendMessageAsync(Context.User, "There is currently no war!");
+                return;
+            }
+            
+            List<string> currentSignup = new List<string>(WarUtility.SignupList);
+            List<string> currentChannelMembers = ExtractWarChannelNames(Context.Guild);
+            currentSignup = Utilities.MatchNames(currentSignup, Context.Guild);
+            List<string> notSignedUp = currentChannelMembers.Except(currentSignup).ToList();
+
+            EmbedBuilder builder = new EmbedBuilder();
+            builder.Title = "Unregistered Nodewar Members";
+            builder.Description = WarUtility.WarDT.ToShortDateString();
+            builder.AddField("Names", string.Join(",\n", notSignedUp));
+
+            await UserExtensions.SendMessageAsync(Context.User, embed: builder.Build());
         }
 
         // Forceably start recording war
