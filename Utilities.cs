@@ -3,6 +3,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Linq;
 using Discord.WebSocket;
+using NodaTime;
 
 namespace DismantledBot
 {
@@ -38,6 +39,19 @@ namespace DismantledBot
     {
         private static Random Random = new Random();
 
+        public static LocalDateTime ConvertDateTimeToDifferentTimeZone(
+            LocalDateTime fromLocal,
+            string fromZoneId,
+            string toZoneId)
+        {
+            DateTimeZone fromZone = DateTimeZoneProviders.Tzdb[fromZoneId];
+            ZonedDateTime fromZoned = fromLocal.InZoneLeniently(fromZone);
+
+            DateTimeZone toZone = DateTimeZoneProviders.Tzdb[toZoneId];
+            ZonedDateTime toZoned = fromZoned.WithZone(fromZone);
+            return toZoned.LocalDateTime;
+        }
+
         public static string MatchName(string name, SocketGuild guild)
         {
             List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
@@ -67,7 +81,8 @@ namespace DismantledBot
                 }
                 else
                 {
-                    MatchedNames.Add(FuzzySearch(flatMembers, name).First());
+                    List<string> fuzzy = FuzzySearch(flatMembers, name);
+                    MatchedNames.Add(fuzzy.First());
                 }
             }
             return MatchedNames;

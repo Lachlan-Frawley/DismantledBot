@@ -16,6 +16,8 @@
   <ItemGroup>
     <PackageReference Include="Discord.Net" Version="2.4.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="NodaTime" Version="3.0.5" />
+    <PackageReference Include="NodaTime.Serialization.JsonNet" Version="3.0.0" />
   </ItemGroup>
 
 </Project>

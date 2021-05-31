@@ -1,5 +1,4 @@
-﻿using Discord.Commands;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -66,12 +65,12 @@ namespace DismantledBot
                 throw e;
             }
         }
-
+      
         public P GetDataOrDefault<P>(string key, P def)
         {
             try
             {
-                return data.TryGetValue(key, out object value) ? (value == null ? def : (P)Convert.ChangeType(value, typeof(P), CultureInfo.InvariantCulture)) : default;
+                return data.TryGetValue(key, out object value) ? (value == null ? def : (P)Convert.ChangeType(value, typeof(P), CultureInfo.InvariantCulture)) : def;
             }
             catch (Exception e)
             {
