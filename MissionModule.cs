@@ -34,7 +34,7 @@ namespace DismantledBot
             };
 
             DateTime time = DateTime.Now;
-            if (time.Hour > 10)
+            if (time.Hour >= 10)
                 time = new DateTime(time.Year, time.Month, time.Day, 10, 0, 0).AddDays(1);
             else
                 time = new DateTime(time.Year, time.Month, time.Day, 10, 0, 0);

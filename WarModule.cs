@@ -35,6 +35,8 @@ namespace DismantledBot
         // Flag if this is a test (wont' change saved war schedule if true)
         public static bool IsTest = false;
 
+        public static List<IGuildUser> currentUsers;
+
         // Called when the bot starts to setup timers
         public static void OnBotStart()
         {
@@ -95,6 +97,8 @@ namespace DismantledBot
             IMessage selectedMessage = eventMessages.Where(x => nwRegex.Matches(x.Embeds.First().Description).Count != 0).Where(x => x.Embeds.Any(y => y.Title.Contains(WarDay.ToString(), StringComparison.InvariantCultureIgnoreCase))).First();
             IEmbed targetEmbed = selectedMessage.Embeds.First();
             EmbedField targetField = targetEmbed.Fields[2];
+
+            currentUsers = (await guild.GetUsersAsync().FlattenAsync()).ToList();
 
             // Get all signed up names and everyone in channel
             SignupList = WarModule.ExtractNamesFromEmbed(targetField.Value);
@@ -239,8 +243,13 @@ namespace DismantledBot
         {
             List<SocketVoiceChannel> warChannels = guild.GetCategoryChannel(BindingModule.settings.GetData<ulong>(BindingModule.BINDING_WARCAT_KEY)).Channels.Where(x => x is SocketVoiceChannel).Select(x => x as SocketVoiceChannel).ToList();
 
-            List<SocketGuildUser> warUsers = warChannels.SelectMany(x => x.Users).ToList();
-            return warUsers.Select(x => string.IsNullOrEmpty(x.Nickname) ? x.Username : x.Nickname).ToList();
+            /*List<SocketGuildUser> warUsers = warChannels.SelectMany(x => x.Users).ToList();
+            return warUsers.Select(x => string.IsNullOrEmpty(x.Nickname) ? x.Username : x.Nickname).ToList();*/
+            /*List<IGuildUser> currentUsers = (await guild.GetUsersAsync().FlattenAsync()).ToList();
+            return currentUsers.Where(x => warChannels.Any(y => x.VoiceChannel.Id == y.Id)).Select(x => string.IsNullOrEmpty(x.Nickname) ? x.Username : x.Nickname).ToList();*/
+            if (WarUtility.currentUsers == null)
+                return new List<string>();
+            return WarUtility.currentUsers.Where(x => x != null && x.VoiceChannel != null && warChannels.Any(y => x.VoiceChannel.Id == y.Id)).Select(x => string.IsNullOrEmpty(x.Nickname) ? x.Username : x.Nickname).ToList();
         }
 
         // Get guild member names
@@ -356,14 +365,14 @@ namespace DismantledBot
                     int dyear = int.Parse(year);
                     int dmonth = DateTime.ParseExact(month, "MMM", CultureInfo.CurrentCulture).Month;
                     int dday = int.Parse(dayNumber);
-                    int dhour = int.Parse(hour) - 2;
+                    int dhour = int.Parse(hour);
                     int dmin = int.Parse(minutes);
 
                     int warOffsetTime = int.Parse(offsetNumber);
                     if (offsetSign.Equals("-"))
                         warOffsetTime *= -1;
 
-                    ZonedDateTime zdt = new ZonedDateTime(new LocalDateTime(dyear, dmonth, dday, dhour, 0), DateTimeZoneProviders.Tzdb["CST6CDT"], Offset.FromHours(warOffsetTime));
+                    ZonedDateTime zdt = new ZonedDateTime(new LocalDateTime(dyear, dmonth, dday, 20, 0), DateTimeZoneProviders.Tzdb["CST6CDT"], Offset.FromHours(warOffsetTime));
 
                     DateTime startTime = zdt.ToDateTimeUtc();
                     TimeSpan untilNw = startTime - DateTime.UtcNow;
@@ -411,6 +420,16 @@ namespace DismantledBot
             settings.SetData(CHAN_SET_KEY, true);
             settings.SetData(WAR_CHAN_KEY, channel);
             await ReplyAsync($"Set next war channel to [{channel}]");
+        }
+
+        [Command("add_player")]
+        [Summary("Adds a player")]
+        [HasRole(Functions.Names.OFFICER_ROLE_FUNC)]
+        public async Task AddPlayer([Summary("Name of the player to add")]string name)
+        {
+            if (!WarUtility.Attendance.Contains(name))
+                WarUtility.Attendance.Add(name);
+            await ReplyAsync($"Added player {name} to war attendance");
         }
 
         // Debug commands
