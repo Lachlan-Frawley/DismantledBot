@@ -47,6 +47,25 @@ namespace DismantledBot
             return matches.Count() != 0;
         }
 
+        public static T ConvertToFlags<T>(string input, string seperator) where T : Enum
+        {
+            int bits = 0;
+            Array enumValues = Enum.GetValues(typeof(T));
+            string[] splits = input.Split(seperator);
+            foreach(string flagValue in splits)
+            {
+                foreach(T flag in enumValues)
+                {
+                    if(string.Equals(flagValue, flag.ToString(), StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        bits |= Convert.ToInt32(flag);
+                        break;
+                    }
+                }
+            }
+            return (T)(object)bits;
+        }
+
         public static T[] ExtractFlags<T>(T value) where T : Enum
         {
             Array enumValues = Enum.GetValues(typeof(T));
@@ -63,9 +82,25 @@ namespace DismantledBot
             return rArry;
         }
 
+        public static TimeSpan ExtractTimeFromDateTime(this DateTime self)
+        {
+            return new TimeSpan(0, self.Hour, self.Minute, self.Second, self.Millisecond);
+        }
+
+        public static bool GetOrNull(this OdbcDataReader self, string name, out object value)
+        {
+            value = self[name];
+            return value != null && value != Convert.DBNull;
+        }
+
+        public static T Get<T>(this OdbcDataReader self, string name)
+        {
+            return (T)Convert.ChangeType(self[name], typeof(T));
+        }
+
         public static T Get<T>(this OdbcDataReader self, int i)
         {
-            return (T)Convert.ChangeType(self.GetValue(i), typeof(T));
+            return (T)Convert.ChangeType(self[i], typeof(T));
         }
 
         public static LocalDateTime ConvertDateTimeToDifferentTimeZone(

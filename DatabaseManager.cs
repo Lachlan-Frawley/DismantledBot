@@ -5,6 +5,7 @@ using System.IO;
 using System.Data.Odbc;
 using System.Data;
 using Discord;
+using System.Globalization;
 
 namespace DismantledBot
 {
@@ -113,7 +114,7 @@ namespace DismantledBot
             {
                 connection.Open();
                 OdbcCommand findEventID = new OdbcCommand("SELECT ID FROM Events WHERE MessageID = ?;", connection);
-                findEventID.Parameters.Add(Convert.ToDecimal(messageID.Value));
+                findEventID.Parameters.AddWithValue("@MessageID", Convert.ToDecimal(messageID.Value));
 
                 object response = findEventID.ExecuteScalar();
                 if (response == null)
@@ -135,7 +136,7 @@ namespace DismantledBot
             {
                 connection.Open();
                 OdbcCommand countCommand = new OdbcCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = ?;", connection);
-                countCommand.Parameters.Add(eventID.Value);
+                countCommand.Parameters.AddWithValue("@EventID", Convert.ToDecimal(eventID.Value));
 
                 object response = countCommand.ExecuteScalar();
                 if (response == null)
@@ -163,6 +164,46 @@ namespace DismantledBot
             return names;
         }
 
+        public List<EventDataObject> QueryAllEventInformation()
+        {
+            List<EventDataObject> allEvents = new List<EventDataObject>();
+
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand eventsQuery = new OdbcCommand(@"SELECT e.ChannelID, e.MessageID, e.EventName, e.EventDescription, e.MaxParticipants, e.EventLength, e.AcceptedEmoteID, t.TimeZone, t.EventTime, s.RepeatDaysOnWeek, s.RepeatWeeksOn4Week FROM (Events e INNER JOIN EventTimes t ON e.TimeID = t.ID) INNER JOIN EventSchedule s ON e.ScheduleID = s.ID;", connection);
+                OdbcDataReader eventsReader = eventsQuery.ExecuteReader();
+                while(eventsReader.Read())
+                {
+                    EventDataObject obj = new EventDataObject()
+                    {
+                        MessageChannelID = eventsReader.GetOrNull("ChannelID", out object mcid) ? Convert.ToUInt64(mcid) : (ulong?)null,
+                        ExistingMessageID = eventsReader.GetOrNull("MessageID", out object emid) ? Convert.ToUInt64(emid) : (ulong?)null,
+                        EventName = eventsReader["EventName"].ToString(),
+                        EventDescription = eventsReader["EventDescription"].ToString(),
+                        MaxParticipants = eventsReader.GetOrNull("MaxParticipants", out object maxp) ? Convert.ToInt32(maxp) : (int?)null,
+                        EventLengthSeconds = eventsReader.GetOrNull("EventLength", out object elen) ? Convert.ToInt64(elen) : (long?)null,
+                        AcceptedEmoteID = eventsReader.Get<ulong>("AcceptedEmoteID"),
+                        EventTime = new EventTimeObject()
+                        {
+                            TimeZone = eventsReader["TimeZone"].ToString(),
+                            EventTime = eventsReader.Get<DateTime>("EventTime").ExtractTimeFromDateTime()
+                        },
+                        EventSchedule = new EventScheduleObject()
+                        {
+                            ApplicableDays = Utilities.ConvertToFlags<EventScheduleObject.Weekday>(eventsReader["RepeatDaysOnWeek"].ToString(), ","),
+                            WeekRepetition = Utilities.ConvertToFlags<EventScheduleObject.FourWeekRepeat>(eventsReader["RepeatWeeksOn4Week"].ToString(), ",")
+                        }
+                    };
+
+                    allEvents.Add(obj);
+                }
+                eventsReader.Close();
+            }
+
+            return allEvents;
+        }
+
         public void CreateEvent(EventDataObject eventData)
         {
             using(var connection = new OdbcConnection(ConnectionString))
@@ -185,7 +226,7 @@ namespace DismantledBot
                 int eventScheduleInsertionID = (int)getInsertIdentity.ExecuteScalar();               
 
                 OdbcCommand createEvent = new OdbcCommand("INSERT INTO Events (ChannelID, MessageID, EventName, EventDescription, MaxParticipants, TimeID, ScheduleID, EventLength, AcceptedEmoteID)\nVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", connection, eventCreationTransaction);
-                createEvent.Parameters.AddWithValue("@ChannelID", eventData.MessageChannelID.HasValue ? Convert.ToDecimal(eventData.ExistingMessageID) : Convert.DBNull);
+                createEvent.Parameters.AddWithValue("@ChannelID", eventData.MessageChannelID.HasValue ? Convert.ToDecimal(eventData.MessageChannelID) : Convert.DBNull);
                 createEvent.Parameters.AddWithValue("@MessageID", eventData.ExistingMessageID.HasValue ? Convert.ToDecimal(eventData.ExistingMessageID) : Convert.DBNull);
                 createEvent.Parameters.AddWithValue("@EventName", eventData.EventName);
                 createEvent.Parameters.AddWithValue("@EventDescription", eventData.EventDescription);

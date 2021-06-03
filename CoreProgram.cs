@@ -15,8 +15,7 @@ namespace DismantledBot
             => new CoreProgram().MainAsync().GetAwaiter().GetResult();
 
         public static DiscordSocketClient client { get; private set; }
-        public static BotControl settings { get; private set; } = BotControl.Load("config.json");      
-        
+        public static BotControl settings { get; private set; } = BotControl.Load("config.json");              
         public static DatabaseManager database { get; private set; }
 
         public async Task MainAsync()
@@ -28,7 +27,7 @@ namespace DismantledBot
             client = new DiscordSocketClient(new DiscordSocketConfig()
             {
                 AlwaysDownloadUsers = true,
-                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.GuildMessages | GatewayIntents.Guilds | GatewayIntents.DirectMessages,
+                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.GuildMessages | GatewayIntents.Guilds | GatewayIntents.DirectMessages | GatewayIntents.DirectMessageReactions | GatewayIntents.GuildMessageReactions,
                 LargeThreshold = 250
             });
             client.Log += Log;
@@ -44,6 +43,7 @@ namespace DismantledBot
                 Console.WriteLine("Bot running....");
                 var users = await client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY)).GetUsersAsync().FlattenAsync();
                 database.ManageGuildMembers(new List<IGuildUser>(users));
+                EventsModule.OnBotStart();
                 WarUtility.OnBotStart();
                 MissionModule.OnBotStart();
             };
@@ -78,10 +78,9 @@ namespace DismantledBot
             Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
         }
 
-        // TODO lol
         private async Task Client_ReactionAdded(Cacheable<IUserMessage, ulong> message, ISocketMessageChannel channel, SocketReaction reaction)
         {
-            throw new NotImplementedException();
+            await EventsModule.TryHandleEmote(reaction.UserId, reaction.MessageId, channel.Id, reaction.Emote as Emote);
         }
 
         private async Task Client_MessageReceived(SocketMessage arg)

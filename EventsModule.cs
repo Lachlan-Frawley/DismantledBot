@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Discord.Rest;
 using Discord.WebSocket;
 using NodaTime;
 
@@ -59,6 +61,57 @@ namespace DismantledBot
     [Group("event")]
     public class EventsModule : ModuleBase<SocketCommandContext>
     {
+        private static List<EventDataObject> allEvents;
+
+        public async static void OnBotStart()
+        {
+            allEvents = CoreProgram.database.QueryAllEventInformation();
+            SocketGuild guild = CoreProgram.client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY));          
+            foreach (EventDataObject evt in allEvents)
+            {
+                if (!evt.MessageChannelID.HasValue || !evt.ExistingMessageID.HasValue)
+                    continue;
+                Emote acceptedEmote = await guild.GetEmoteAsync(evt.AcceptedEmoteID);
+
+                var channel = guild.GetTextChannel(evt.MessageChannelID.Value);
+                var message = await channel.GetMessageAsync(evt.ExistingMessageID.Value);
+                RestUserMessage actualMessage = message as RestUserMessage;
+                await actualMessage.ModifyAsync(x =>
+                {
+                    x.Content = "Hehe Test";
+                    x.Embed = CreateEmbed(evt, acceptedEmote);
+                });
+            }
+        }
+
+        public static async Task<bool> TryHandleEmote(ulong userID, ulong messageID, ulong channelID, Emote emote)
+        {
+            SocketGuild guild = CoreProgram.client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY));
+
+            if(!allEvents.FindOut(x => x.MessageChannelID == channelID && x.ExistingMessageID == messageID, out EventDataObject evt))
+            {
+                return false;
+            }
+
+            SocketGuildUser user = guild.GetUser(userID);
+            SocketTextChannel channel = guild.GetTextChannel(channelID);
+            RestUserMessage message = await channel.GetMessageAsync(messageID) as RestUserMessage;
+            Emote selectionEmote = await guild.GetEmoteAsync(evt.AcceptedEmoteID);
+            await message.RemoveReactionAsync(emote, user);
+
+            if (emote.Id != selectionEmote.Id)
+                return false;
+
+            UpdateEvent(evt, user);
+
+            return true;
+        }
+
+        private static void UpdateEvent(EventDataObject data, SocketGuildUser user)
+        {
+            
+        }
+
         public static Embed CreateEmbed(EventDataObject eventData, Emote acceptedEmote)
         {
             EmbedBuilder builder = new EmbedBuilder();
@@ -69,8 +122,8 @@ namespace DismantledBot
             builder.AddField("Time", "Time: TODO");
             string maxSignupCount = eventData.MaxParticipants.HasValue ? $"/{eventData.MaxParticipants}" : string.Empty;
 
-            int signupCount = CoreProgram.database.QueryEventSignupCount(eventData.MessageChannelID);
-            List<string> signupNames = CoreProgram.database.QueryEventSignupNames(eventData.MessageChannelID);
+            int signupCount = CoreProgram.database.QueryEventSignupCount(eventData.ExistingMessageID);
+            List<string> signupNames = CoreProgram.database.QueryEventSignupNames(eventData.ExistingMessageID);
             string signupFieldValue = string.Join(",\n", signupNames);
             if (string.IsNullOrEmpty(signupFieldValue))
                 signupFieldValue = "None!";
@@ -123,11 +176,14 @@ namespace DismantledBot
             Emote acceptedEmote = await Context.Guild.GetEmoteAsync(eventData.AcceptedEmoteID);
             Embed eventEmbed = CreateEmbed(eventData, acceptedEmote);
             IUserMessage mRef = await ReplyAsync("Hehe Test", embed: eventEmbed);
+            eventData.MessageChannelID = mRef.Channel.Id;
+            eventData.ExistingMessageID = mRef.Id;
             await mRef.AddReactionAsync(acceptedEmote);
 
             try
             {
                 CoreProgram.database.CreateEvent(eventData);
+                allEvents.Add(eventData);
             }
             catch(Exception e)
             {
@@ -136,7 +192,7 @@ namespace DismantledBot
                 await mRef.DeleteAsync();
                 await ReplyAsync("Database insertion failed...");
                 return;
-            }
+            }            
         }
     }
 }
