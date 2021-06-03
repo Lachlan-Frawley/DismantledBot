@@ -47,6 +47,22 @@ namespace DismantledBot
             return matches.Count() != 0;
         }
 
+        public static T[] ExtractFlags<T>(T value) where T : Enum
+        {
+            Array enumValues = Enum.GetValues(typeof(T));
+            uint activeFlags = System.Runtime.Intrinsics.X86.Popcnt.PopCount(Convert.ToUInt32(value));
+            T[] rArry = new T[activeFlags];
+            int index = 0;
+            foreach(T flag in enumValues)
+            {
+                if(value.HasFlag(flag))
+                {
+                    rArry[index++] = flag;
+                }
+            }
+            return rArry;
+        }
+
         public static T Get<T>(this OdbcDataReader self, int i)
         {
             return (T)Convert.ChangeType(self.GetValue(i), typeof(T));

@@ -62,7 +62,7 @@ namespace DismantledBot
 
                 if (missingNames.Count + updatedNames.Count + newNames.Count == 0)
                 {
-                    Console.WriteLine($"Completed guild member data update, data unchanged");
+                    Console.WriteLine($"Completed guild member data update, no changed detected");
                     return;
                 }
 
@@ -102,6 +102,103 @@ namespace DismantledBot
 
                 Console.WriteLine($"Completed guild member data update: Removed {deletedRowCount} rows, Updated {updatedRowCount} rows, Added {additionRowCount} rows");
             };
+        }
+
+        public ulong? QueryEventIDFromMessageID(ulong? messageID)
+        {
+            if (!messageID.HasValue)
+                return null;
+
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand findEventID = new OdbcCommand("SELECT ID FROM Events WHERE MessageID = ?;", connection);
+                findEventID.Parameters.Add(Convert.ToDecimal(messageID.Value));
+
+                object response = findEventID.ExecuteScalar();
+                if (response == null)
+                    return null;
+                return Convert.ToUInt32(response);
+            }
+        }
+
+        public int QueryEventSignupCount(ulong? messageID)
+        {
+            if (!messageID.HasValue)
+                return -1;
+
+            ulong? eventID = QueryEventIDFromMessageID(messageID);
+            if (!eventID.HasValue)
+                return -2;
+
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand countCommand = new OdbcCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = ?;", connection);
+                countCommand.Parameters.Add(eventID.Value);
+
+                object response = countCommand.ExecuteScalar();
+                if (response == null)
+                    return -3;
+                return Convert.ToInt32(response);
+            }
+        }
+
+        public List<string> QueryEventSignupNames(ulong? messageID)
+        {
+            List<string> names = new List<string>();
+            if (!messageID.HasValue)
+                return names;
+
+            ulong? eventID = QueryEventIDFromMessageID(messageID);
+            if (!eventID.HasValue)
+                return names;
+
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand readCommand = new OdbcCommand("TODO", connection);
+            }
+
+            return names;
+        }
+
+        public void CreateEvent(EventDataObject eventData)
+        {
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcTransaction eventCreationTransaction = connection.BeginTransaction();
+                int modifications = 0;
+                OdbcCommand getInsertIdentity = new OdbcCommand("SELECT @@IDENTITY;", connection, eventCreationTransaction);
+
+                OdbcCommand createEventTime = new OdbcCommand("INSERT INTO EventTimes (TimeZone, EventTime)\nVALUES(?, ?);", connection, eventCreationTransaction);
+                createEventTime.Parameters.AddWithValue("@TimeZone", eventData.EventTime.TimeZone);
+                createEventTime.Parameters.AddWithValue(@"EventTime", eventData.EventTime.EventTime.ToString(@"hh\:mm"));
+                modifications += createEventTime.ExecuteNonQuery();                
+                int eventTimeInsertionID = (int)getInsertIdentity.ExecuteScalar();
+
+                OdbcCommand createEventSchedule = new OdbcCommand("INSERT INTO EventSchedule (RepeatDaysOnWeek, RepeatWeeksOn4Week)\nVALUES(?, ?);", connection, eventCreationTransaction);
+                createEventSchedule.Parameters.AddWithValue("@RepeatDaysOnWeek", string.Join(',', Utilities.ExtractFlags(eventData.EventSchedule.ApplicableDays)));
+                createEventSchedule.Parameters.AddWithValue("@RepeatWeeksOn4Week", string.Join(',', Utilities.ExtractFlags(eventData.EventSchedule.WeekRepetition)));
+                modifications += createEventSchedule.ExecuteNonQuery();
+                int eventScheduleInsertionID = (int)getInsertIdentity.ExecuteScalar();               
+
+                OdbcCommand createEvent = new OdbcCommand("INSERT INTO Events (ChannelID, MessageID, EventName, EventDescription, MaxParticipants, TimeID, ScheduleID, EventLength, AcceptedEmoteID)\nVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", connection, eventCreationTransaction);
+                createEvent.Parameters.AddWithValue("@ChannelID", eventData.MessageChannelID.HasValue ? Convert.ToDecimal(eventData.ExistingMessageID) : Convert.DBNull);
+                createEvent.Parameters.AddWithValue("@MessageID", eventData.ExistingMessageID.HasValue ? Convert.ToDecimal(eventData.ExistingMessageID) : Convert.DBNull);
+                createEvent.Parameters.AddWithValue("@EventName", eventData.EventName);
+                createEvent.Parameters.AddWithValue("@EventDescription", eventData.EventDescription);
+                createEvent.Parameters.AddWithValue("@MaxParticipants", eventData.MaxParticipants ?? Convert.DBNull);
+                createEvent.Parameters.AddWithValue("@TimeID", eventTimeInsertionID);
+                createEvent.Parameters.AddWithValue("@ScheduleID", eventScheduleInsertionID);
+                createEvent.Parameters.AddWithValue("@EventLength", eventData.EventLengthSeconds ?? Convert.DBNull);
+                createEvent.Parameters.AddWithValue("@AcceptedEmoteID", Convert.ToDecimal(eventData.AcceptedEmoteID));
+                modifications += createEvent.ExecuteNonQuery();
+                
+                eventCreationTransaction.Commit();
+                Console.WriteLine($"Event creation completed: {modifications} rows affected");
+            }
         }
     }
 }

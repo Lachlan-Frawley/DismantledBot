@@ -73,8 +73,15 @@ namespace DismantledBot
 
         public async Task InstallCommandsAsync()
         {
-            client.MessageReceived += Client_MessageReceived;           
+            client.MessageReceived += Client_MessageReceived;
+            client.ReactionAdded += Client_ReactionAdded;
             Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
+        }
+
+        // TODO lol
+        private async Task Client_ReactionAdded(Cacheable<IUserMessage, ulong> message, ISocketMessageChannel channel, SocketReaction reaction)
+        {
+            throw new NotImplementedException();
         }
 
         private async Task Client_MessageReceived(SocketMessage arg)
