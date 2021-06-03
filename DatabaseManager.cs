@@ -12,15 +12,14 @@ namespace DismantledBot
     {
         private readonly string ConnectionString;
 
-        public DatabaseManager(string templateLocation, string databasePath)
+        public DatabaseManager(string databasePath)
         {
-            if(!File.Exists(databasePath))
-            {                
-                File.Copy(templateLocation, databasePath);
-                Console.WriteLine("Created working copy!");
-            }
-            
-            ConnectionString = @"Driver={MICROSOFT ACCESS DRIVER (*.mdb, *.accdb)};DBQ=" + databasePath;
+            ConnectionString = @"Driver={MICROSOFT ACCESS DRIVER (*.mdb, *.accdb)};DBQ=" + databasePath;            
+
+            if (!File.Exists(databasePath))
+            {
+                throw new FileNotFoundException("Cannot find database! (Did you forget to move the blank copy to the appropriate directory?)");
+            }         
         }
 
         public void ManageGuildMembers(List<IGuildUser> users)

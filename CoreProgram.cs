@@ -23,6 +23,8 @@ namespace DismantledBot
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+            database = new DatabaseManager(settings.DatabaseActualLocation);
+
             client = new DiscordSocketClient(new DiscordSocketConfig()
             {
                 AlwaysDownloadUsers = true,
@@ -40,7 +42,6 @@ namespace DismantledBot
             client.Ready += async () =>
             {
                 Console.WriteLine("Bot running....");
-                database = new DatabaseManager(settings.DatabaseTemplateLocation, settings.DatabaseActualLocation);
                 var users = await client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY)).GetUsersAsync().FlattenAsync();
                 database.ManageGuildMembers(new List<IGuildUser>(users));
                 WarUtility.OnBotStart();
