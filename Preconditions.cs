@@ -92,4 +92,22 @@ namespace DismantledBot
             }
         }
     }
+
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
+    public sealed class IsMessageNotDMAttribute : PreconditionAttribute
+    {
+        public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
+        {
+            return Task.FromResult(context.Guild != null ? PreconditionResult.FromSuccess() : PreconditionResult.FromError("Message is DM!"));
+        }
+    }
+
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
+    public sealed class IsMessageDMAttribute : PreconditionAttribute
+    {
+        public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
+        {
+            return Task.FromResult(context.Guild == null ? PreconditionResult.FromSuccess() : PreconditionResult.FromError("Message is DM!"));
+        }
+    }
 }

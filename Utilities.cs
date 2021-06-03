@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Linq;
 using Discord.WebSocket;
 using NodaTime;
+using System.Data.Odbc;
 
 namespace DismantledBot
 {
@@ -38,6 +39,18 @@ namespace DismantledBot
     public static class Utilities
     {
         private static Random Random = new Random();
+
+        public static bool FindOut<T>(this IEnumerable<T> self, Func<T, bool> predicate, out T value)
+        {
+            IEnumerable<T> matches = self.Where(predicate);
+            value = matches.FirstOrDefault();
+            return matches.Count() != 0;
+        }
+
+        public static T Get<T>(this OdbcDataReader self, int i)
+        {
+            return (T)Convert.ChangeType(self.GetValue(i), typeof(T));
+        }
 
         public static LocalDateTime ConvertDateTimeToDifferentTimeZone(
             LocalDateTime fromLocal,

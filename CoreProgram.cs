@@ -15,7 +15,9 @@ namespace DismantledBot
             => new CoreProgram().MainAsync().GetAwaiter().GetResult();
 
         public static DiscordSocketClient client { get; private set; }
-        public static BotControl settings { get; private set; } = BotControl.Load("config.json");        
+        public static BotControl settings { get; private set; } = BotControl.Load("config.json");      
+        
+        public static DatabaseManager database { get; private set; }
 
         public async Task MainAsync()
         {
@@ -24,7 +26,7 @@ namespace DismantledBot
             client = new DiscordSocketClient(new DiscordSocketConfig()
             {
                 AlwaysDownloadUsers = true,
-                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.GuildMessages | GatewayIntents.Guilds,
+                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.GuildMessages | GatewayIntents.Guilds | GatewayIntents.DirectMessages,
                 LargeThreshold = 250
             });
             client.Log += Log;
@@ -35,13 +37,15 @@ namespace DismantledBot
             CommandHandler handler = new CommandHandler(client, new CommandService());
             await handler.InstallCommandsAsync();
 
-            client.Ready += () =>
+            client.Ready += async () =>
             {
                 Console.WriteLine("Bot running....");
+                database = new DatabaseManager(settings.DatabaseTemplateLocation, settings.DatabaseActualLocation);
+                var users = await client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY)).GetUsersAsync().FlattenAsync();
+                database.ManageGuildMembers(new List<IGuildUser>(users));
                 WarUtility.OnBotStart();
                 MissionModule.OnBotStart();
-                return Task.CompletedTask;
-            };          
+            };
 
             await Task.Delay(-1);
         }
@@ -68,7 +72,7 @@ namespace DismantledBot
 
         public async Task InstallCommandsAsync()
         {
-            client.MessageReceived += Client_MessageReceived;
+            client.MessageReceived += Client_MessageReceived;           
             Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
         }
 

@@ -11,6 +11,9 @@ namespace DismantledBot
         public char Prefix = '~';
         public string SettingsPath = "Settings\\";
 
+        public string DatabaseTemplateLocation = "BotDatabaseTemplate.accdb";
+        public string DatabaseActualLocation = "Settings\\BotDatabase.accdb";
+
         public string LogPath = "Logs\\";
         public int LogLevel = 0;
 

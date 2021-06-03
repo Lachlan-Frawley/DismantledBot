@@ -40,6 +40,8 @@ namespace DismantledBot
         // Called when the bot starts to setup timers
         public static void OnBotStart()
         {
+            return;
+
             // Clear everything
             UntilWarTimer = null;
             WarTimer = null;
@@ -202,6 +204,7 @@ namespace DismantledBot
     }
 
     [Group("war")]
+    [ForceFailure]
     public class WarModule : ModuleBase<SocketCommandContext>
     {
         public enum WarChannel
