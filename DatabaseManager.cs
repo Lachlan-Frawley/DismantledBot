@@ -76,7 +76,7 @@ namespace DismantledBot
                 missingNames.ForEach(x =>
                 {
                     removeCommand.Parameters.Clear();
-                    removeCommand.Parameters.AddWithValue("@DiscordID", x);
+                    removeCommand.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(x));
                     deletedRowCount += removeCommand.ExecuteNonQuery();
                 });
 
@@ -105,7 +105,7 @@ namespace DismantledBot
             };
         }
 
-        public ulong? QueryEventIDFromMessageID(ulong? messageID)
+        public long? QueryEventIDFromMessageID(ulong? messageID)
         {
             if (!messageID.HasValue)
                 return null;
@@ -119,7 +119,7 @@ namespace DismantledBot
                 object response = findEventID.ExecuteScalar();
                 if (response == null)
                     return null;
-                return Convert.ToUInt32(response);
+                return Convert.ToInt64(response);
             }
         }
 
@@ -128,7 +128,7 @@ namespace DismantledBot
             if (!messageID.HasValue)
                 return -1;
 
-            ulong? eventID = QueryEventIDFromMessageID(messageID);
+            long? eventID = QueryEventIDFromMessageID(messageID);
             if (!eventID.HasValue)
                 return -2;
 
@@ -145,13 +145,80 @@ namespace DismantledBot
             }
         }
 
+        public long QueryNextEventSignupOrder(ulong? messageID)
+        {
+            if (!messageID.HasValue)
+                return -1;
+
+            long? eventID = QueryEventIDFromMessageID(messageID);
+            if (!eventID.HasValue)
+                return -2;
+
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand query = new OdbcCommand("SELECT SignupOrder FROM CurrentEventSignup WHERE EventID = ? ORDER BY SignupOrder DESC;", connection);
+                query.Parameters.AddWithValue("@EventID", eventID.Value);
+
+                object value = query.ExecuteScalar();
+                if (value == null)
+                    return -3;
+                return Convert.ToInt64(value);
+            }
+        }
+
+        public bool IsUserInSignup(long eventID, ulong userID)
+        {
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand query = new OdbcCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = ? AND DiscordID = ?;", connection);
+                query.Parameters.AddWithValue("@EventID", eventID);
+                query.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(userID));
+
+                object value = query.ExecuteScalar();
+                if (value == null)
+                    return false;
+                long amount = (long)value;
+                return amount != 0;
+            }
+        }
+
+        public void RemoveUserFromSignup(long eventID, ulong userID)
+        {
+            using(var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand query = new OdbcCommand("DELETE FROM CurrentEventSignup WHERE EventID = ? AND DiscordID = ?;", connection);
+                query.Parameters.AddWithValue("@EventID", eventID);
+                query.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(userID));
+                int modifications = query.ExecuteNonQuery();
+                Console.WriteLine($"Removed {modifications} row(s)");
+            }
+        }
+
+        public void AddUserToSignup(long eventID, ulong userID, long signupOrder)
+        {
+            using (var connection = new OdbcConnection(ConnectionString))
+            {
+                connection.Open();
+                OdbcCommand query = new OdbcCommand("INSERT INTO CurrentEventSignup (EventID, DiscordID, SignupOrder) VALUES (?, ?, ?);", connection);
+                query.Parameters.AddWithValue("@EventID", eventID);
+                query.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(userID));
+                query.Parameters.AddWithValue("@SignupOrder", signupOrder);
+                int modifications = query.ExecuteNonQuery();
+                Console.WriteLine($"Added {modifications} row(s)");
+            }
+        }
+
+        // TODO
         public List<string> QueryEventSignupNames(ulong? messageID)
         {
             List<string> names = new List<string>();
             if (!messageID.HasValue)
                 return names;
 
-            ulong? eventID = QueryEventIDFromMessageID(messageID);
+            long? eventID = QueryEventIDFromMessageID(messageID);
             if (!eventID.HasValue)
                 return names;
 

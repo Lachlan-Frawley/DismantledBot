@@ -80,6 +80,9 @@ namespace DismantledBot
 
         private async Task Client_ReactionAdded(Cacheable<IUserMessage, ulong> message, ISocketMessageChannel channel, SocketReaction reaction)
         {
+            if (reaction.UserId == client.CurrentUser.Id)
+                return;
+
             await EventsModule.TryHandleEmote(reaction.UserId, reaction.MessageId, channel.Id, reaction.Emote as Emote);
         }
 

@@ -81,6 +81,8 @@ namespace DismantledBot
                     x.Content = "Hehe Test";
                     x.Embed = CreateEmbed(evt, acceptedEmote);
                 });
+                await actualMessage.RemoveAllReactionsAsync();
+                await actualMessage.AddReactionAsync(acceptedEmote);
             }
         }
 
@@ -104,12 +106,25 @@ namespace DismantledBot
 
             UpdateEvent(evt, user);
 
+            await message.ModifyAsync(x =>
+            {
+                x.Content = "Hehe Test";
+                x.Embed = CreateEmbed(evt, selectionEmote);
+            });
+
             return true;
         }
 
         private static void UpdateEvent(EventDataObject data, SocketGuildUser user)
         {
-            
+            ulong discordID = user.Id;
+            long eventID = CoreProgram.database.QueryEventIDFromMessageID(data.ExistingMessageID).Value;
+            long signupOrder = CoreProgram.database.QueryNextEventSignupOrder(data.ExistingMessageID) + 1;
+
+            if (CoreProgram.database.IsUserInSignup(eventID, discordID))
+                CoreProgram.database.RemoveUserFromSignup(eventID, discordID);
+            else
+                CoreProgram.database.AddUserToSignup(eventID, discordID, signupOrder);
         }
 
         public static Embed CreateEmbed(EventDataObject eventData, Emote acceptedEmote)
