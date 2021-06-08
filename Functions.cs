@@ -26,25 +26,20 @@ namespace DismantledBot
 
         public static class Names
         {
-            public const string CREATOR_ID_FUNC = "cidf";
-            public const string GET_OWNER_ID_FUNC = "goidf";
-            public const string OFFICER_ROLE_FUNC = "orf";
-            public const string MEMBER_ROLE_FUNC = "mrf";
+            public static string GET_OWNER_FUNC = "GET_OWNER_FUNC";
+            public static string GET_ADMIN_FUNC = "GET_ADMIN_FUNC";
         }
 
         public static class Implementations
         {
-            public static Func<ulong> OFFICER_ROLE_FUNC = () => 740394363858976818;
-            public static Func<ulong> CREATOR_ID_FUNC = () => 216098427317125120;
-            public static Func<ulong> GET_OWNER_ID_FUNC = () =>
-            {
-                ulong ownerID = 0;
-
-                return ownerID == 0 ? CREATOR_ID_FUNC() : ownerID;
-            };
-            public static Func<ulong> MEMBER_ROLE_FUNC = () =>
+            public static Func<ulong> GET_OWNER_FUNC = () =>
             {
                 return 0;
+            };
+
+            public static Func<ulong> GET_ADMIN_FUNC = () =>
+            {
+                return CoreProgram.settings.AdminID;
             };
         }
     }

@@ -60,8 +60,7 @@ namespace DismantledBot
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine(e.Message);
-                Console.Error.WriteLine(e.StackTrace);
+                Utilities.PrintException(e);
                 throw e;
             }
         }
@@ -74,8 +73,7 @@ namespace DismantledBot
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine(e.Message);
-                Console.Error.WriteLine(e.StackTrace);
+                Utilities.PrintException(e);
                 throw e;
             }
         }
@@ -88,8 +86,7 @@ namespace DismantledBot
             } 
             catch(Exception e)
             {
-                Console.Error.WriteLine(e.Message);
-                Console.Error.WriteLine(e.StackTrace);
+                Utilities.PrintException(e);
                 throw e;
             }
         }
@@ -110,6 +107,9 @@ namespace DismantledBot
             else
             {
                 data = new Dictionary<string, object>();
+                string dirPath = $"{Directory.GetCurrentDirectory()}\\{CoreProgram.settings.SettingsPath}\\";
+                if (!Directory.Exists(dirPath))
+                    Directory.CreateDirectory(dirPath);
                 File.Create(GetPath()).Close();
             }            
         }
@@ -122,7 +122,12 @@ namespace DismantledBot
             }
             catch (DirectoryNotFoundException e)
             {
-                // Log error
+                CoreProgram.logger.Write(Logger.CRITICAL, "Could not find directory to save module settings!");
+                throw e;
+            }
+            catch (FileNotFoundException e)
+            {
+                CoreProgram.logger.Write(Logger.CRITICAL, "Could not find file to save module settings!");
                 throw e;
             }
             catch (IOException e)

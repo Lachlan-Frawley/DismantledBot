@@ -6,7 +6,8 @@ namespace DismantledBot
 {
     public sealed class BotControl
     {
-        public string Token;
+        public string Token = "";
+        public ulong AdminID = 0;
 
         public char Prefix = '~';
         public string SettingsPath = "Settings\\";
@@ -32,11 +33,12 @@ namespace DismantledBot
                 BotControl settings = JsonConvert.DeserializeObject<BotControl>(text);
                 return settings;
             } 
-            catch(FileNotFoundException e)
+            catch(FileNotFoundException)
             {
                 Console.Error.WriteLine($"Couldn't find file @ path: [{Directory.GetCurrentDirectory()}\\{path}]");
                 File.WriteAllText(path, JsonConvert.SerializeObject(new BotControl(), Formatting.Indented));
-                throw e;
+                Environment.Exit(-1);
+                return null;
             } 
             catch(Exception e)
             {

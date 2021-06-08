@@ -23,7 +23,7 @@ namespace DismantledBot
     {
         public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
         {
-            return Task.FromResult(context.User.Id == Functions.Implementations.CREATOR_ID_FUNC() ? PreconditionResult.FromSuccess() : PreconditionResult.FromError("User is not bot creator"));
+            return Task.FromResult(context.User.Id == Functions.Implementations.GET_ADMIN_FUNC() ? PreconditionResult.FromSuccess() : PreconditionResult.FromError("User is not bot admin"));
         }
     }
 
@@ -79,16 +79,16 @@ namespace DismantledBot
             RoleIds = idMappingFuncs.Select(x => Functions.GetFunc<ulong>(x)).ToArray();
         }
 
-        public override async Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
+        public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
         {
-            List<ulong> userRoles = new List<ulong>((await context.Guild.GetUserAsync(context.User.Id)).RoleIds);
+            List<ulong> userRoles = CoreProgram.BoundGuild.GetUser(context.User.Id).Roles.Select(x => x.Id).ToList();
 
             if(RoleIds.Any(x => userRoles.Contains(x())))
             {
-                return PreconditionResult.FromSuccess();
+                return Task.FromResult(PreconditionResult.FromSuccess());
             } else
             {
-                return PreconditionResult.FromError("User does not have a required role!");
+                return Task.FromResult(PreconditionResult.FromError("User does not have a required role!"));
             }
         }
     }

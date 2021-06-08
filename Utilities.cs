@@ -2,7 +2,6 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Linq;
-using Discord.WebSocket;
 using NodaTime;
 using System.Data.Odbc;
 
@@ -52,6 +51,11 @@ namespace DismantledBot
             IEnumerable<T> matches = self.Where(predicate);
             value = matches.FirstOrDefault();
             return matches.Count() != 0;
+        }
+
+        public static T ConvertToFlags<T>(ulong input) where T : Enum
+        {
+            return (T)(object)input;
         }
 
         public static T ConvertToFlags<T>(string input, string seperator) where T : Enum

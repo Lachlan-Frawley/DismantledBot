@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
-using Oracle.ManagedDataAccess.Client;
 
 namespace DismantledBot
 {
@@ -16,8 +15,10 @@ namespace DismantledBot
             => new CoreProgram().MainAsync().GetAwaiter().GetResult();
 
         public static DiscordSocketClient client { get; private set; }
-        public static BotControl settings { get; private set; } = BotControl.Load("config.json");              
+        public static BotControl settings { get; private set; } = BotControl.Load("config.json");
+        public static Logger logger { get; private set; } = new Logger(settings.LogPath, settings.LogLevel);
         public static DatabaseManager database { get; private set; }
+        public static SocketGuild BoundGuild { get; private set; }
 
         public async Task MainAsync()
         {
@@ -36,13 +37,22 @@ namespace DismantledBot
             await client.LoginAsync(TokenType.Bot, settings.Token);
             await client.StartAsync();
 
+            try
+            {
+                BoundGuild = client.Guilds.First();
+            } catch
+            {
+                Console.WriteLine("Failed to determine bound guild!");
+                Environment.Exit(-1);
+            }
+
             CommandHandler handler = new CommandHandler(client, new CommandService());
             await handler.InstallCommandsAsync();
 
             client.Ready += async () =>
             {
                 Console.WriteLine("Bot running....");
-                var users = await client.GetGuild(740392514040758303).GetUsersAsync().FlattenAsync();
+                var users = await BoundGuild.GetUsersAsync().FlattenAsync();
                 try
                 {
                     database.ManageGuildMembers(new List<IGuildUser>(users));
