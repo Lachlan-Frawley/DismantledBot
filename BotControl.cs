@@ -11,10 +11,13 @@ namespace DismantledBot
         public char Prefix = '~';
         public string SettingsPath = "Settings\\";
 
-        public string DatabaseActualLocation = "Settings\\BotDatabase.accdb";
-
         public string LogPath = "Logs\\";
         public int LogLevel = 0;
+
+        public string DataSource = "ORCL";
+        public string DBTNSAdminLocation = "%ORACLE_HOME%\\network\\admin";
+        public string DBUserID = "";
+        public string DBPassword = "";
 
         private BotControl()
         {

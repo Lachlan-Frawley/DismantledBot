@@ -40,6 +40,13 @@ namespace DismantledBot
     {
         private static Random Random = new Random();
 
+        public static void PrintException(Exception e)
+        {
+            Console.WriteLine(e.GetType());
+            Console.WriteLine(e.Message);
+            Console.WriteLine(e.StackTrace);
+        }
+
         public static bool FindOut<T>(this IEnumerable<T> self, Func<T, bool> predicate, out T value)
         {
             IEnumerable<T> matches = self.Where(predicate);
@@ -99,6 +106,22 @@ namespace DismantledBot
         }
 
         public static T Get<T>(this OdbcDataReader self, int i)
+        {
+            return (T)Convert.ChangeType(self[i], typeof(T));
+        }
+
+        public static bool GetOrNull(this Oracle.ManagedDataAccess.Client.OracleDataReader self, string name, out object value)
+        {            
+            value = self[name];
+            return value != null && value != Convert.DBNull;
+        }
+
+        public static T Get<T>(this Oracle.ManagedDataAccess.Client.OracleDataReader self, string name)
+        {
+            return (T)Convert.ChangeType(self[name], typeof(T));
+        }
+
+        public static T Get<T>(this Oracle.ManagedDataAccess.Client.OracleDataReader self, int i)
         {
             return (T)Convert.ChangeType(self[i], typeof(T));
         }

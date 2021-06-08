@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using Oracle.ManagedDataAccess.Client;
 
 namespace DismantledBot
 {
@@ -22,7 +23,7 @@ namespace DismantledBot
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-            database = new DatabaseManager(settings.DatabaseActualLocation);
+            database = new DatabaseManager();
 
             client = new DiscordSocketClient(new DiscordSocketConfig()
             {
@@ -42,7 +43,14 @@ namespace DismantledBot
             {
                 Console.WriteLine("Bot running....");
                 var users = await client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY)).GetUsersAsync().FlattenAsync();
-                database.ManageGuildMembers(new List<IGuildUser>(users));
+                try
+                {
+                    database.ManageGuildMembers(new List<IGuildUser>(users));
+                } catch(Exception e)
+                {
+                    Utilities.PrintException(e);
+                    Environment.Exit(-1);
+                }
                 EventsModule.OnBotStart();
                 WarUtility.OnBotStart();
                 MissionModule.OnBotStart();
@@ -83,7 +91,7 @@ namespace DismantledBot
             if (reaction.UserId == client.CurrentUser.Id)
                 return;
 
-            await EventsModule.TryHandleEmote(reaction.UserId, reaction.MessageId, channel.Id, reaction.Emote as Emote);
+            //await EventsModule.TryHandleEmote(reaction.UserId, reaction.MessageId, channel.Id, reaction.Emote as Emote);
         }
 
         private async Task Client_MessageReceived(SocketMessage arg)

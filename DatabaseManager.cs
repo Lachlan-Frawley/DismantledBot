@@ -6,44 +6,54 @@ using System.Data.Odbc;
 using System.Data;
 using Discord;
 using System.Globalization;
+using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 
 namespace DismantledBot
 {
     public class DatabaseManager
     {
-        private readonly string ConnectionString;
-
-        public DatabaseManager(string databasePath)
+        private OracleConnection MakeConnection()
         {
-            ConnectionString = @"Driver={MICROSOFT ACCESS DRIVER (*.mdb, *.accdb)};DBQ=" + databasePath;            
+            OracleConnection connection = new OracleConnection();
 
-            if (!File.Exists(databasePath))
-            {
-                throw new FileNotFoundException("Cannot find database! (Did you forget to move the blank copy to the appropriate directory?)");
-            }         
+            OracleConnectionStringBuilder ocsb = new OracleConnectionStringBuilder();
+            ocsb.Password = CoreProgram.settings.DBPassword;
+            ocsb.UserID = CoreProgram.settings.DBUserID;
+            ocsb.DataSource = CoreProgram.settings.DataSource;
+            string tnsAdmin = CoreProgram.settings.DBTNSAdminLocation;
+            string oHome = Environment.GetEnvironmentVariable("ORACLE_HOME", EnvironmentVariableTarget.Machine);
+            if (tnsAdmin.StartsWith("%ORACLE_HOME%"))
+                tnsAdmin = tnsAdmin.Replace("%ORACLE_HOME%", oHome);
+            ocsb.TnsAdmin = tnsAdmin;
+
+            connection.ConnectionString = ocsb.ConnectionString;
+            return connection;
         }
 
         public void ManageGuildMembers(List<IGuildUser> users)
-        {
-            using(var connection = new OdbcConnection(ConnectionString))
+        {           
+            using(var connection = MakeConnection())
             {
                 // Nickname change (update)
                 List<IGuildUser> updatedNames = new List<IGuildUser>();
                 // Joined server (insert)
                 List<IGuildUser> newNames = new List<IGuildUser>();
                 // Left/Changed username (delete)
-                List<ulong> missingNames = new List<ulong>();
+                List<ulong> missingNames = new List<ulong>();       
 
                 connection.Open();
-                OdbcCommand getIds = new OdbcCommand("SELECT DiscordID, Username, Nickname FROM GuildMembers;", connection);
-                OdbcDataReader allIds = getIds.ExecuteReader();
+                OracleCommand getIds = new OracleCommand("SELECT DISCORDID, USERNAME, NICKNAME FROM GUILDMEMBERS", connection);
+                OracleDataReader allIds = getIds.ExecuteReader();
 
                 Dictionary<ulong, string> nickData = new Dictionary<ulong, string>();
                 Dictionary<ulong, string> usernameData = new Dictionary<ulong, string>();
                 while (allIds.Read())
                 {
-                    nickData.Add(allIds.Get<ulong>(0), allIds.GetString(2));
-                    usernameData.Add(allIds.Get<ulong>(0), allIds.GetString(1));
+                    byte[] idBytes = allIds.Get<byte[]>(0);
+                    ulong discordID = BitConverter.ToUInt64(idBytes);
+                    nickData.Add(discordID, allIds.IsDBNull(2) ? string.Empty : allIds.GetString(2));
+                    usernameData.Add(discordID, allIds.GetString(1));
                 }
                 allIds.Close();
 
@@ -67,25 +77,28 @@ namespace DismantledBot
                     return;
                 }
 
-                OdbcTransaction userTransaction = connection.BeginTransaction();
-                OdbcCommand removeCommand = new OdbcCommand("DELETE FROM GuildMembers WHERE DiscordID = ?;", connection, userTransaction);
-                OdbcCommand updateCommand = new OdbcCommand("UPDATE GuildMembers SET Nickname = ? WHERE DiscordID = ?;", connection, userTransaction);
-                OdbcCommand insertCommand = new OdbcCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname)\nVALUES (?, ?, ?);", connection, userTransaction);
+                OracleTransaction userTransaction = connection.BeginTransaction();
+                OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
+                removeCommand.Transaction = userTransaction;
+                OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
+                updateCommand.Transaction = userTransaction;
+                OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
+                insertCommand.Transaction = userTransaction;
 
                 int deletedRowCount = 0;
                 missingNames.ForEach(x =>
                 {
                     removeCommand.Parameters.Clear();
-                    removeCommand.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(x));
+                    var param = removeCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x));
                     deletedRowCount += removeCommand.ExecuteNonQuery();
                 });
-
+                
                 int updatedRowCount = 0;
                 updatedNames.ForEach(x =>
                 {
                     updateCommand.Parameters.Clear();
-                    updateCommand.Parameters.AddWithValue("@Nickname", x.Nickname == null ? string.Empty : x.Nickname);
-                    updateCommand.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(x.Id));
+                    updateCommand.Parameters.Add("Nickname", x.Nickname == null ? string.Empty : x.Nickname);
+                    updateCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x.Id));
                     updatedRowCount += updateCommand.ExecuteNonQuery();
                 });
 
@@ -93,9 +106,9 @@ namespace DismantledBot
                 newNames.ForEach(x =>
                 {
                     insertCommand.Parameters.Clear();
-                    insertCommand.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(x.Id));
-                    insertCommand.Parameters.AddWithValue("@Username", x.Username);
-                    insertCommand.Parameters.AddWithValue("@Nickname", x.Nickname == null ? string.Empty : x.Nickname);
+                    insertCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x.Id));
+                    insertCommand.Parameters.Add("Username", x.Username);
+                    insertCommand.Parameters.Add("Nickname", x.Nickname == null ? string.Empty : x.Nickname);
                     additionRowCount += insertCommand.ExecuteNonQuery();
                 });
 
@@ -110,11 +123,11 @@ namespace DismantledBot
             if (!messageID.HasValue)
                 return null;
 
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand findEventID = new OdbcCommand("SELECT ID FROM Events WHERE MessageID = ?;", connection);
-                findEventID.Parameters.AddWithValue("@MessageID", Convert.ToDecimal(messageID.Value));
+                OracleCommand findEventID = new OracleCommand("SELECT EVENTID FROM Events WHERE MessageID = :MessageID", connection);
+                findEventID.Parameters.Add("MessageID", BitConverter.GetBytes(messageID.Value));
 
                 object response = findEventID.ExecuteScalar();
                 if (response == null)
@@ -132,11 +145,11 @@ namespace DismantledBot
             if (!eventID.HasValue)
                 return -2;
 
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand countCommand = new OdbcCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = ?;", connection);
-                countCommand.Parameters.AddWithValue("@EventID", Convert.ToDecimal(eventID.Value));
+                OracleCommand countCommand = new OracleCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = :EventID", connection);
+                countCommand.Parameters.Add("EventID", BitConverter.GetBytes(eventID.Value));
 
                 object response = countCommand.ExecuteScalar();
                 if (response == null)
@@ -145,8 +158,11 @@ namespace DismantledBot
             }
         }
 
+        // Not working for now
         public long QueryNextEventSignupOrder(ulong? messageID)
         {
+            return 0;
+
             if (!messageID.HasValue)
                 return -1;
 
@@ -154,11 +170,11 @@ namespace DismantledBot
             if (!eventID.HasValue)
                 return -2;
 
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand query = new OdbcCommand("SELECT SignupOrder FROM CurrentEventSignup WHERE EventID = ? ORDER BY SignupOrder DESC;", connection);
-                query.Parameters.AddWithValue("@EventID", eventID.Value);
+                OracleCommand query = new OracleCommand("SELECT SignupOrder FROM CurrentEventSignup WHERE EventID = :EventID ORDER BY SignupOrder DESC", connection);
+                query.Parameters.Add("EventID", BitConverter.GetBytes(messageID.Value));
 
                 object value = query.ExecuteScalar();
                 if (value == null)
@@ -169,12 +185,12 @@ namespace DismantledBot
 
         public bool IsUserInSignup(long eventID, ulong userID)
         {
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand query = new OdbcCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = ? AND DiscordID = ?;", connection);
-                query.Parameters.AddWithValue("@EventID", eventID);
-                query.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(userID));
+                OracleCommand query = new OracleCommand("SELECT COUNT(*) FROM CurrentEventSignup WHERE EventID = :EventID AND DiscordID = :DiscordID", connection);
+                query.Parameters.Add("EventID", eventID);
+                query.Parameters.Add("DiscordID", BitConverter.GetBytes(userID));
 
                 object value = query.ExecuteScalar();
                 if (value == null)
@@ -186,12 +202,12 @@ namespace DismantledBot
 
         public void RemoveUserFromSignup(long eventID, ulong userID)
         {
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand query = new OdbcCommand("DELETE FROM CurrentEventSignup WHERE EventID = ? AND DiscordID = ?;", connection);
-                query.Parameters.AddWithValue("@EventID", eventID);
-                query.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(userID));
+                OracleCommand query = new OracleCommand("DELETE FROM CurrentEventSignup WHERE EventID = :EventID AND DiscordID = :DiscordID", connection);
+                query.Parameters.Add("EventID", eventID);
+                query.Parameters.Add("DiscordID", BitConverter.GetBytes(userID));
                 int modifications = query.ExecuteNonQuery();
                 Console.WriteLine($"Removed {modifications} row(s)");
             }
@@ -199,13 +215,13 @@ namespace DismantledBot
 
         public void AddUserToSignup(long eventID, ulong userID, long signupOrder)
         {
-            using (var connection = new OdbcConnection(ConnectionString))
+            using (var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand query = new OdbcCommand("INSERT INTO CurrentEventSignup (EventID, DiscordID, SignupOrder) VALUES (?, ?, ?);", connection);
-                query.Parameters.AddWithValue("@EventID", eventID);
-                query.Parameters.AddWithValue("@DiscordID", Convert.ToDecimal(userID));
-                query.Parameters.AddWithValue("@SignupOrder", signupOrder);
+                OracleCommand query = new OracleCommand("INSERT INTO CurrentEventSignup (EventID, DiscordID, SignupOrder) VALUES (:EventID, :DiscordID, :SignupOrder);", connection);
+                query.Parameters.Add("EventID", eventID);
+                query.Parameters.Add("DiscordID", BitConverter.GetBytes(userID));
+                query.Parameters.Add("SignupOrder", signupOrder);
                 int modifications = query.ExecuteNonQuery();
                 Console.WriteLine($"Added {modifications} row(s)");
             }
@@ -222,10 +238,10 @@ namespace DismantledBot
             if (!eventID.HasValue)
                 return names;
 
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand readCommand = new OdbcCommand("TODO", connection);
+                OracleCommand readCommand = new OracleCommand("TODO", connection);
             }
 
             return names;
@@ -235,22 +251,22 @@ namespace DismantledBot
         {
             List<EventDataObject> allEvents = new List<EventDataObject>();
 
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcCommand eventsQuery = new OdbcCommand(@"SELECT e.ChannelID, e.MessageID, e.EventName, e.EventDescription, e.MaxParticipants, e.EventLength, e.AcceptedEmoteID, t.TimeZone, t.EventTime, s.RepeatDaysOnWeek, s.RepeatWeeksOn4Week FROM (Events e INNER JOIN EventTimes t ON e.TimeID = t.ID) INNER JOIN EventSchedule s ON e.ScheduleID = s.ID;", connection);
-                OdbcDataReader eventsReader = eventsQuery.ExecuteReader();
+                OracleCommand eventsQuery = new OracleCommand(@"SELECT e.ChannelID, e.MessageID, e.EventName, e.EventDescription, e.MaxParticipants, e.EventLength, e.AcceptedEmoteID, t.TimeZone, t.EventTime, s.RepeatDays, s.RepeatWeeks FROM (Events e INNER JOIN EventTimes t ON e.TimeID = t.ID) INNER JOIN EventSchedule s ON e.ScheduleID = s.ID", connection);
+                OracleDataReader eventsReader = eventsQuery.ExecuteReader();
                 while(eventsReader.Read())
                 {
                     EventDataObject obj = new EventDataObject()
                     {
-                        MessageChannelID = eventsReader.GetOrNull("ChannelID", out object mcid) ? Convert.ToUInt64(mcid) : (ulong?)null,
-                        ExistingMessageID = eventsReader.GetOrNull("MessageID", out object emid) ? Convert.ToUInt64(emid) : (ulong?)null,
+                        MessageChannelID = eventsReader.GetOrNull("ChannelID", out object mcid) ? BitConverter.ToUInt64((byte[])mcid) : (ulong?)null,
+                        ExistingMessageID = eventsReader.GetOrNull("MessageID", out object emid) ? BitConverter.ToUInt64((byte[])emid) : (ulong?)null,
                         EventName = eventsReader["EventName"].ToString(),
                         EventDescription = eventsReader["EventDescription"].ToString(),
                         MaxParticipants = eventsReader.GetOrNull("MaxParticipants", out object maxp) ? Convert.ToInt32(maxp) : (int?)null,
-                        EventLengthSeconds = eventsReader.GetOrNull("EventLength", out object elen) ? Convert.ToInt64(elen) : (long?)null,
-                        AcceptedEmoteID = eventsReader.Get<ulong>("AcceptedEmoteID"),
+                        EventLengthSeconds = eventsReader.GetOrNull("EventLength", out object elen) ? BitConverter.ToInt64((byte[])elen) : (long?)null,
+                        AcceptedEmoteID = BitConverter.ToUInt64(eventsReader.Get<byte[]>("AcceptedEmoteID")),
                         EventTime = new EventTimeObject()
                         {
                             TimeZone = eventsReader["TimeZone"].ToString(),
@@ -258,8 +274,10 @@ namespace DismantledBot
                         },
                         EventSchedule = new EventScheduleObject()
                         {
-                            ApplicableDays = Utilities.ConvertToFlags<EventScheduleObject.Weekday>(eventsReader["RepeatDaysOnWeek"].ToString(), ","),
-                            WeekRepetition = Utilities.ConvertToFlags<EventScheduleObject.FourWeekRepeat>(eventsReader["RepeatWeeksOn4Week"].ToString(), ",")
+                            ApplicableDays = (EventScheduleObject.Weekday)BitConverter.ToInt64(eventsReader.Get<byte[]>("RepeatDays")),
+                            WeekRepetition = (EventScheduleObject.FourWeekRepeat)BitConverter.ToInt64(eventsReader.Get<byte[]>("RepeatWeeks"))
+                            //ApplicableDays = Utilities.ConvertToFlags<EventScheduleObject.Weekday>(eventsReader["RepeatDays"].ToString(), ","),
+                            //WeekRepetition = Utilities.ConvertToFlags<EventScheduleObject.FourWeekRepeat>(eventsReader["RepeatWeeks"].ToString(), ",")
                         }
                     };
 
@@ -273,35 +291,39 @@ namespace DismantledBot
 
         public void CreateEvent(EventDataObject eventData)
         {
-            using(var connection = new OdbcConnection(ConnectionString))
+            using(var connection = MakeConnection())
             {
                 connection.Open();
-                OdbcTransaction eventCreationTransaction = connection.BeginTransaction();
+                OracleTransaction eventCreationTransaction = connection.BeginTransaction();
                 int modifications = 0;
-                OdbcCommand getInsertIdentity = new OdbcCommand("SELECT @@IDENTITY;", connection, eventCreationTransaction);
+                OracleCommand getInsertIdentity = new OracleCommand("SELECT @@IDENTITY;", connection);
+                getInsertIdentity.Transaction = eventCreationTransaction;
 
-                OdbcCommand createEventTime = new OdbcCommand("INSERT INTO EventTimes (TimeZone, EventTime)\nVALUES(?, ?);", connection, eventCreationTransaction);
-                createEventTime.Parameters.AddWithValue("@TimeZone", eventData.EventTime.TimeZone);
-                createEventTime.Parameters.AddWithValue(@"EventTime", eventData.EventTime.EventTime.ToString(@"hh\:mm"));
+                OracleCommand createEventTime = new OracleCommand("INSERT INTO EventTimes (TimeZone, EventTime) VALUES(:TimeZone, :EventTime);", connection);
+                createEventTime.Transaction = eventCreationTransaction;
+                createEventTime.Parameters.Add("TimeZone", eventData.EventTime.TimeZone);
+                createEventTime.Parameters.Add("EventTime", eventData.EventTime.EventTime.ToString(@"hh\:mm"));
                 modifications += createEventTime.ExecuteNonQuery();                
                 int eventTimeInsertionID = (int)getInsertIdentity.ExecuteScalar();
 
-                OdbcCommand createEventSchedule = new OdbcCommand("INSERT INTO EventSchedule (RepeatDaysOnWeek, RepeatWeeksOn4Week)\nVALUES(?, ?);", connection, eventCreationTransaction);
-                createEventSchedule.Parameters.AddWithValue("@RepeatDaysOnWeek", string.Join(',', Utilities.ExtractFlags(eventData.EventSchedule.ApplicableDays)));
-                createEventSchedule.Parameters.AddWithValue("@RepeatWeeksOn4Week", string.Join(',', Utilities.ExtractFlags(eventData.EventSchedule.WeekRepetition)));
+                OracleCommand createEventSchedule = new OracleCommand("INSERT INTO EventSchedule (RepeatDays, RepeatWeeks) VALUES(:RepeatDays, :RepeatWeeks);", connection);
+                createEventSchedule.Transaction = eventCreationTransaction;
+                createEventSchedule.Parameters.Add("RepeatDays", BitConverter.GetBytes((int)eventData.EventSchedule.ApplicableDays));
+                createEventSchedule.Parameters.Add("RepeatWeeks", BitConverter.GetBytes((int)eventData.EventSchedule.WeekRepetition));
                 modifications += createEventSchedule.ExecuteNonQuery();
-                int eventScheduleInsertionID = (int)getInsertIdentity.ExecuteScalar();               
+                int eventScheduleInsertionID = (int)getInsertIdentity.ExecuteScalar();
 
-                OdbcCommand createEvent = new OdbcCommand("INSERT INTO Events (ChannelID, MessageID, EventName, EventDescription, MaxParticipants, TimeID, ScheduleID, EventLength, AcceptedEmoteID)\nVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", connection, eventCreationTransaction);
-                createEvent.Parameters.AddWithValue("@ChannelID", eventData.MessageChannelID.HasValue ? Convert.ToDecimal(eventData.MessageChannelID) : Convert.DBNull);
-                createEvent.Parameters.AddWithValue("@MessageID", eventData.ExistingMessageID.HasValue ? Convert.ToDecimal(eventData.ExistingMessageID) : Convert.DBNull);
-                createEvent.Parameters.AddWithValue("@EventName", eventData.EventName);
-                createEvent.Parameters.AddWithValue("@EventDescription", eventData.EventDescription);
-                createEvent.Parameters.AddWithValue("@MaxParticipants", eventData.MaxParticipants ?? Convert.DBNull);
-                createEvent.Parameters.AddWithValue("@TimeID", eventTimeInsertionID);
-                createEvent.Parameters.AddWithValue("@ScheduleID", eventScheduleInsertionID);
-                createEvent.Parameters.AddWithValue("@EventLength", eventData.EventLengthSeconds ?? Convert.DBNull);
-                createEvent.Parameters.AddWithValue("@AcceptedEmoteID", Convert.ToDecimal(eventData.AcceptedEmoteID));
+                OracleCommand createEvent = new OracleCommand("INSERT INTO Events (ChannelID, MessageID, EventName, EventDescription, MaxParticipants, AcceptedEmoteID, EventLength, TimeID, ScheduleID) VALUES (:ChannelID, :MessageID, :EventName, :EventDescription, :MaxParticipants, :AcceptedEmoteID, :EventLength, :TimeID, :ScheduleID)", connection);
+                createEvent.Transaction = eventCreationTransaction;
+                createEvent.Parameters.Add("ChannelID", eventData.MessageChannelID.HasValue ? BitConverter.GetBytes(eventData.MessageChannelID.Value) : Convert.DBNull);
+                createEvent.Parameters.Add("MessageID", eventData.ExistingMessageID.HasValue ? BitConverter.GetBytes(eventData.ExistingMessageID.Value) : Convert.DBNull);
+                createEvent.Parameters.Add("EventName", eventData.EventName);
+                createEvent.Parameters.Add("EventDescription", eventData.EventDescription);
+                createEvent.Parameters.Add("MaxParticipants", eventData.MaxParticipants ?? Convert.DBNull);
+                createEvent.Parameters.Add("TimeID", eventTimeInsertionID);
+                createEvent.Parameters.Add("ScheduleID", eventScheduleInsertionID);
+                createEvent.Parameters.Add("EventLength", eventData.EventLengthSeconds.HasValue ? BitConverter.GetBytes(eventData.EventLengthSeconds.Value) : Convert.DBNull);
+                createEvent.Parameters.Add("AcceptedEmoteID", BitConverter.GetBytes(eventData.AcceptedEmoteID));
                 modifications += createEvent.ExecuteNonQuery();
                 
                 eventCreationTransaction.Commit();
