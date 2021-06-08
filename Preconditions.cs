@@ -17,9 +17,9 @@ namespace DismantledBot
         }
     }
 
-    // Checks if command is run by the bot creator
+    // Checks if command is run by the bot admin
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
-    public sealed class IsCreatorAttribute : PreconditionAttribute
+    public sealed class IsBotAdminAttribute : PreconditionAttribute
     {
         public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
         {

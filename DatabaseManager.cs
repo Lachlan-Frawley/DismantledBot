@@ -4,6 +4,8 @@ using System.Linq;
 using System.Data;
 using Discord;
 using Oracle.ManagedDataAccess.Client;
+using System.Data.Common;
+using System.Threading.Tasks;
 
 namespace DismantledBot
 {
@@ -27,7 +29,43 @@ namespace DismantledBot
             return connection;
         }
 
-        public void ManageGuildMembers(List<IGuildUser> users)
+        public void RemoveUser(IGuildUser user)
+        {
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
+                removeCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(user.Id));
+                removeCommand.ExecuteNonQuery();
+            }
+        }
+
+        public void AddUser(IGuildUser user)
+        {
+            using (var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
+                insertCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(user.Id));
+                insertCommand.Parameters.Add("Username", user.Username);
+                insertCommand.Parameters.Add("Nickname", user.Nickname ?? Convert.DBNull);
+                insertCommand.ExecuteNonQuery();
+            }
+        }
+
+        public void UpdateUser(IGuildUser user)
+        {
+            using (var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
+                updateCommand.Parameters.Add("Nickname", user.Nickname ?? Convert.DBNull);
+                updateCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(user.Id));
+                updateCommand.ExecuteNonQuery();
+            }
+        }
+
+        public async Task ManageGuildMembers(List<IGuildUser> users)
         {           
             using(var connection = MakeConnection())
             {
@@ -38,15 +76,15 @@ namespace DismantledBot
                 // Left/Changed username (delete)
                 List<ulong> missingNames = new List<ulong>();       
 
-                connection.Open();
+                await connection.OpenAsync();
                 OracleCommand getIds = new OracleCommand("SELECT DISCORDID, USERNAME, NICKNAME FROM GUILDMEMBERS", connection);
-                OracleDataReader allIds = getIds.ExecuteReader();
+                DbDataReader allIds = await getIds.ExecuteReaderAsync();
 
                 Dictionary<ulong, string> nickData = new Dictionary<ulong, string>();
                 Dictionary<ulong, string> usernameData = new Dictionary<ulong, string>();
-                while (allIds.Read())
+                while (await allIds.ReadAsync())
                 {
-                    byte[] idBytes = allIds.Get<byte[]>(0);
+                    byte[] idBytes = (byte[])allIds[0];
                     ulong discordID = BitConverter.ToUInt64(idBytes);
                     nickData.Add(discordID, allIds.IsDBNull(2) ? string.Empty : allIds.GetString(2));
                     usernameData.Add(discordID, allIds.GetString(1));
@@ -85,7 +123,7 @@ namespace DismantledBot
                 missingNames.ForEach(x =>
                 {
                     removeCommand.Parameters.Clear();
-                    var param = removeCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x));
+                    removeCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x));                    
                     deletedRowCount += removeCommand.ExecuteNonQuery();
                 });
                 

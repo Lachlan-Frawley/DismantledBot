@@ -35,16 +35,7 @@ namespace DismantledBot
             client.Log += Log;
 
             await client.LoginAsync(TokenType.Bot, settings.Token);
-            await client.StartAsync();
-
-            try
-            {
-                BoundGuild = client.Guilds.First();
-            } catch
-            {
-                Console.WriteLine("Failed to determine bound guild!");
-                Environment.Exit(-1);
-            }
+            await client.StartAsync();       
 
             CommandHandler handler = new CommandHandler(client, new CommandService());
             await handler.InstallCommandsAsync();
@@ -52,10 +43,19 @@ namespace DismantledBot
             client.Ready += async () =>
             {
                 Console.WriteLine("Bot running....");
+                try
+                {
+                    BoundGuild = client.Guilds.First();
+                }
+                catch
+                {
+                    Console.WriteLine("Failed to determine bound guild!");
+                    Environment.Exit(-1);
+                }
                 var users = await BoundGuild.GetUsersAsync().FlattenAsync();
                 try
                 {
-                    database.ManageGuildMembers(new List<IGuildUser>(users));
+                    await database.ManageGuildMembers(new List<IGuildUser>(users));
                 } catch(Exception e)
                 {
                     Utilities.PrintException(e);
@@ -88,9 +88,43 @@ namespace DismantledBot
 
         public async Task InstallCommandsAsync()
         {
-            client.MessageReceived += Client_MessageReceived;
+            client.MessageReceived += Client_MessageReceived;          
             Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
-        }     
+
+            client.GuildMemberUpdated += GuildMemberChanged;
+            client.UserJoined += (user) =>
+            {
+                return GuildMemberChanged(null, user);
+            };
+            client.UserLeft += (user) =>
+            {
+                return GuildMemberChanged(user, null);
+            };
+        }
+
+        private Task GuildMemberChanged(SocketGuildUser before, SocketGuildUser after)
+        {
+            if (before != null && after != null)
+            {
+                if (before.Id == after.Id && string.Equals(before.Username, after.Username) && string.Equals(before.Nickname, after.Nickname))
+                    return Task.CompletedTask;
+                CoreProgram.logger.Write2(Logger.DEBUG, $"User Updated: {after}");
+                CoreProgram.database.UpdateUser(after);
+            } else if (before != null && after == null)
+            {
+                CoreProgram.logger.Write2(Logger.DEBUG, $"User Removed: {before}");
+                CoreProgram.database.RemoveUser(before);
+            } else if (before == null && after != null)
+            {
+                CoreProgram.logger.Write2(Logger.DEBUG, $"User Added: {after}");
+                CoreProgram.database.AddUser(after);
+            } else
+            {
+                CoreProgram.logger.Write(Logger.ERROR, "Unknown state?");
+            }
+
+            return Task.CompletedTask;
+        }
 
         private async Task Client_MessageReceived(SocketMessage arg)
         {

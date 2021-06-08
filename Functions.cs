@@ -26,15 +26,15 @@ namespace DismantledBot
 
         public static class Names
         {
-            public static string GET_OWNER_FUNC = "GET_OWNER_FUNC";
-            public static string GET_ADMIN_FUNC = "GET_ADMIN_FUNC";
+            public const string GET_OWNER_FUNC = "GET_OWNER_FUNC";
+            public const string GET_ADMIN_FUNC = "GET_ADMIN_FUNC";
         }
 
         public static class Implementations
         {
             public static Func<ulong> GET_OWNER_FUNC = () =>
             {
-                return 0;
+                return SettingsModule.settings.GetData<ulong>(Names.GET_OWNER_FUNC);
             };
 
             public static Func<ulong> GET_ADMIN_FUNC = () =>

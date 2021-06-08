@@ -20,13 +20,27 @@ namespace DismantledBot
                 Directory.CreateDirectory(logPath);
 
             LogLevel = level;
-            LogFile = $"{logPath}\\Log_{Directory.GetFiles(logPath).Length}_{DateTime.Now.ToShortDateString()}.log";
+            LogFile = $"{logPath}\\Log_{Directory.GetFiles(logPath).Length}_({DateTime.Now.ToString("yyyy-MM-dd")}).log";
+
+            string logDir = Path.GetDirectoryName(logPath);
+            if (!Directory.Exists(logDir))
+                Directory.CreateDirectory(logDir);
+            if (!File.Exists(LogFile))
+                File.Create(LogFile).Close();
         }
 
         public void Write(int level, string value)
         {
             if (level > LogLevel)
                 return;
+            Write(value);
+        }
+
+        public void Write2(int level, string value)
+        {
+            if (level > LogLevel)
+                return;
+            Console.WriteLine(value);
             Write(value);
         }
 

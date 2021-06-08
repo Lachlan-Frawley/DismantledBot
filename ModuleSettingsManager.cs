@@ -91,6 +91,8 @@ namespace DismantledBot
             }
         }
 
+        public List<string> Keys { get => data.Keys.ToList(); }
+
         public string GetPath()
         {
             return $"{Directory.GetCurrentDirectory()}\\{CoreProgram.settings.SettingsPath}\\{typeof(T).FullName}.json";
