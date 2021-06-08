@@ -139,10 +139,8 @@ namespace DismantledBot
             return toZoned.LocalDateTime;
         }
 
-        public static string MatchName(string name, SocketGuild guild)
+        public static string MatchName(string name, List<(string, string)> allGuildMembers)
         {
-            List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
-
             if(allGuildMembers.Any(x => name.Equals(x.Item1) || name.Equals(x.Item2)))
             {
                 return name;
@@ -151,9 +149,8 @@ namespace DismantledBot
             return FuzzySearch(allGuildMembers.Select(x => x.Item1).Union(allGuildMembers.Select(x => x.Item2)), name).First();
         }
 
-        public static List<string> MatchNames(IEnumerable<string> names, SocketGuild guild)
+        public static List<string> MatchNames(IEnumerable<string> names, List<(string, string)> allGuildMembers)
         {
-            List<(string, string)> allGuildMembers = WarModule.GetAllGuildMembers(guild);
             List<string> flatMembers = allGuildMembers.Select(x => x.Item1).Union(allGuildMembers.Select(x => x.Item2)).ToList();
 
             List<string> MatchedNames = new List<string>();

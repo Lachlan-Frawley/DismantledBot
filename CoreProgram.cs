@@ -42,7 +42,7 @@ namespace DismantledBot
             client.Ready += async () =>
             {
                 Console.WriteLine("Bot running....");
-                var users = await client.GetGuild(WarModule.settings.GetData<ulong>(WarModule.SERVER_ID_KEY)).GetUsersAsync().FlattenAsync();
+                var users = await client.GetGuild(740392514040758303).GetUsersAsync().FlattenAsync();
                 try
                 {
                     database.ManageGuildMembers(new List<IGuildUser>(users));
@@ -51,9 +51,6 @@ namespace DismantledBot
                     Utilities.PrintException(e);
                     Environment.Exit(-1);
                 }
-                EventsModule.OnBotStart();
-                WarUtility.OnBotStart();
-                MissionModule.OnBotStart();
             };
 
             await Task.Delay(-1);
@@ -82,17 +79,8 @@ namespace DismantledBot
         public async Task InstallCommandsAsync()
         {
             client.MessageReceived += Client_MessageReceived;
-            client.ReactionAdded += Client_ReactionAdded;
             Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
-        }
-
-        private async Task Client_ReactionAdded(Cacheable<IUserMessage, ulong> message, ISocketMessageChannel channel, SocketReaction reaction)
-        {
-            if (reaction.UserId == client.CurrentUser.Id)
-                return;
-
-            //await EventsModule.TryHandleEmote(reaction.UserId, reaction.MessageId, channel.Id, reaction.Emote as Emote);
-        }
+        }     
 
         private async Task Client_MessageReceived(SocketMessage arg)
         {

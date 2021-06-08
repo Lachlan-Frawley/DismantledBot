@@ -38,13 +38,13 @@ namespace DismantledBot
             public static Func<ulong> CREATOR_ID_FUNC = () => 216098427317125120;
             public static Func<ulong> GET_OWNER_ID_FUNC = () =>
             {
-                ulong ownerID = BindingModule.settings.GetData<ulong>(BindingModule.BINDING_OWNER_KEY);
+                ulong ownerID = 0;
 
                 return ownerID == 0 ? CREATOR_ID_FUNC() : ownerID;
             };
             public static Func<ulong> MEMBER_ROLE_FUNC = () =>
             {
-                return BindingModule.settings.GetData<ulong>(BindingModule.BINDING_GMEMBER_KEY);
+                return 0;
             };
         }
     }
