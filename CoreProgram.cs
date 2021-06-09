@@ -109,15 +109,15 @@ namespace DismantledBot
                 if (before.Id == after.Id && string.Equals(before.Username, after.Username) && string.Equals(before.Nickname, after.Nickname))
                     return Task.CompletedTask;
                 CoreProgram.logger.Write2(Logger.DEBUG, $"User Updated: {after}");
-                CoreProgram.database.UpdateUser(after);
+                CoreProgram.database.UpdateUser(after.FromIGuildUser());
             } else if (before != null && after == null)
             {
                 CoreProgram.logger.Write2(Logger.DEBUG, $"User Removed: {before}");
-                CoreProgram.database.RemoveUser(before);
+                CoreProgram.database.RemoveUser(before.FromIGuildUser());
             } else if (before == null && after != null)
             {
                 CoreProgram.logger.Write2(Logger.DEBUG, $"User Added: {after}");
-                CoreProgram.database.AddUser(after);
+                CoreProgram.database.AddUser(after.FromIGuildUser());
             } else
             {
                 CoreProgram.logger.Write(Logger.ERROR, "Unknown state?");

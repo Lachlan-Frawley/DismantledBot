@@ -6,6 +6,7 @@ using Discord;
 using Oracle.ManagedDataAccess.Client;
 using System.Data.Common;
 using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
 
 namespace DismantledBot
 {
@@ -29,38 +30,139 @@ namespace DismantledBot
             return connection;
         }
 
-        public void RemoveUser(IGuildUser user)
+        /*public T Get<T>(Predicate<T> search)
+        {
+            DBTable table = Attribute.GetCustomAttribute(typeof(T), typeof(DBTable)) as DBTable;
+            if (table == null)
+                return default;
+
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"SELECT * FROM {table.TableName}", connection);
+                OracleDataReader reader = query.ExecuteReader();
+
+                while(reader.Read())
+                {
+                    T myT = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
+                    foreach(FieldInfo field in typeof(T).GetFields())
+                    {
+                        string fieldName = field.GetCustomAttribute<DBField>().FieldName ?? field.Name;
+                        if (reader.IsDBNull(fieldName))
+                        {
+                            field.SetValue(myT, null);
+                            continue;
+                        }
+
+                        object val = reader[fieldName];
+                        if(field.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
+                        {
+                            val = Utilities.TryBitConversion(val, field.FieldType);
+                        } else if(!val.GetType().IsEquivalentTo(field.FieldType))
+                        {
+                            val = Convert.ChangeType(val, field.FieldType);
+                        }
+                        field.SetValue(myT, val);
+                    }
+                    if (search(myT))
+                        return myT;
+                }
+                reader.Close();
+            }
+
+            return default;
+        }
+
+        public void Insert<T>(T obj)
+        {
+            DBTable table = Attribute.GetCustomAttribute(typeof(T), typeof(DBTable)) as DBTable;
+            if (table == null)
+                return;
+
+            List<string> fields = typeof(T).GetFields().Select(x => x.GetCustomAttribute<DBField>().FieldName ?? x.Name).ToList();
+
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields)}) VALUES ({string.Join(", ", fields.Select(x => $":{x}"))}", connection);
+                foreach(FieldInfo field in typeof(T).GetFields())
+                {
+                    string name = field.GetCustomAttribute<DBField>().FieldName ?? field.Name;
+                    object val = field.GetValue(obj);
+                    if (field.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
+                        val = Utilities.ForwardBitConversion(val);
+                    query.Parameters.Add(name, val);
+                }
+                query.ExecuteNonQuery();
+            }
+        }
+
+        public void Remove<T>(T obj)
+        {
+            // TODO
+            throw new NotImplementedException();
+        }
+
+        public void Update1<T>(FieldInfo searchKey, object searchValue, params (FieldInfo field, object newValue)[] changes)
+        {
+            DBTable table = Attribute.GetCustomAttribute(typeof(T), typeof(DBTable)) as DBTable;
+            if (table == null)
+                return;
+
+            List<string> fields = changes.Select(x => x.field.GetCustomAttribute<DBField>().FieldName ?? x.field.Name).ToList();
+            string searchKeyName = searchKey.GetCustomAttribute<DBField>().FieldName ?? searchKey.Name;
+            if (searchKey.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
+                //searchValue = Utilities.ForwardBitConversion(searchValue);
+
+            using (var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", fields.Select(x => $"{x} = :{x}"))} WHERE {searchKeyName} = :{searchKeyName}", connection);
+                query.Parameters.Add(searchKeyName, searchValue);
+                foreach((FieldInfo field, object newValue) in changes)
+                {
+                    string name = field.GetCustomAttribute<DBField>().FieldName ?? field.Name;
+                    object val = newValue;
+                    if (field.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
+                        val = Utilities.ForwardBitConversion(val);
+                    query.Parameters.Add(name, val);
+                }              
+                query.ExecuteNonQuery();
+            }
+        }*/
+
+        public void RemoveUser(DatabaseDataTypes.GuildMember user)
         {
             using(var connection = MakeConnection())
             {
                 connection.Open();
                 OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
-                removeCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(user.Id));
+                removeCommand.Parameters.Add("DiscordID", user.DiscordID);
                 removeCommand.ExecuteNonQuery();
             }
         }
 
-        public void AddUser(IGuildUser user)
+        public void AddUser(DatabaseDataTypes.GuildMember user)
         {
             using (var connection = MakeConnection())
             {
                 connection.Open();
                 OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
-                insertCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(user.Id));
+                insertCommand.Parameters.Add("DiscordID", user.DiscordID);
                 insertCommand.Parameters.Add("Username", user.Username);
-                insertCommand.Parameters.Add("Nickname", user.Nickname ?? Convert.DBNull);
+                insertCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));
                 insertCommand.ExecuteNonQuery();
             }
         }
 
-        public void UpdateUser(IGuildUser user)
+        public void UpdateUser(DatabaseDataTypes.GuildMember user)
         {
             using (var connection = MakeConnection())
             {
                 connection.Open();
                 OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
-                updateCommand.Parameters.Add("Nickname", user.Nickname ?? Convert.DBNull);
-                updateCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(user.Id));
+                updateCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));
+                updateCommand.Parameters.Add("DiscordID", user.DiscordID);
                 updateCommand.ExecuteNonQuery();
             }
         }
@@ -150,6 +252,50 @@ namespace DismantledBot
 
                 Console.WriteLine($"Completed guild member data update: Removed {deletedRowCount} rows, Updated {updatedRowCount} rows, Added {additionRowCount} rows");
             };
+        }
+    }
+
+    namespace DatabaseDataTypes
+    {
+        [AutoDBTable("GuildMembers")]
+        public sealed class GuildMember : AutoDBBase<GuildMember>
+        {
+            [AutoDBField(OracleDbType.Varchar2, 8, FieldName = "DiscordID")]
+            public byte[] RAWDiscordID { get; private set; }
+
+            [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Username")]
+            public string Username { get; private set; }
+
+            [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Nickname")]
+            public string Nickname { get; private set; }
+
+            [AutoDBIgnore]
+            public ulong DiscordID { get => BitConverter.ToUInt64(RAWDiscordID); }
+
+            [AutoDBIgnore]
+            public string Name { get => Nickname ?? Username; }
+
+            public GuildMember()
+            {
+
+            }
+
+            public GuildMember(IGuildUser user)
+            {
+                RAWDiscordID = BitConverter.GetBytes(user.Id);
+                Username = user.Username;
+                Nickname = user.Nickname;
+            }
+
+            public override bool Equals([AllowNull] GuildMember x, [AllowNull] GuildMember y)
+            {
+                return (x == null && y == null) || (x.DiscordID == y.DiscordID);
+            }
+
+            public override int GetHashCode([DisallowNull] GuildMember obj)
+            {
+                return obj.DiscordID.GetHashCode();
+            }
         }
     }
 }

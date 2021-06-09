@@ -4,6 +4,10 @@ using System.Runtime.CompilerServices;
 using System.Linq;
 using NodaTime;
 using System.Data.Odbc;
+using Discord;
+using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
+using System.Collections;
 
 namespace DismantledBot
 {
@@ -38,6 +42,51 @@ namespace DismantledBot
     public static class Utilities
     {
         private static Random Random = new Random();
+        #region AutoDB Helper
+        public static bool IsValidAutoDBClass(this object self)
+        {
+            return IsValidAutoDBClass(self.GetType());
+        }
+        public static bool IsValidAutoDBClass(this Type self)
+        {            
+            AutoDBTable table = self.GetAutoTable();
+            return table != null && !string.IsNullOrEmpty(table.TableName) && self.GetConstructor(new Type[] { }) != null;
+        }
+        public static AutoDBField GetAutoField(this PropertyInfo self)
+        {
+            return self.GetCustomAttribute<AutoDBField>();
+        }
+        public static AutoDBField GetAutoField(this FieldInfo self)
+        {
+            return self.GetCustomAttribute<AutoDBField>();
+        }
+        public static AutoDBTable GetAutoTable(this PropertyInfo self)
+        {
+            return GetAutoTable(self.DeclaringType);
+        }
+        public static AutoDBTable GetAutoTable(this FieldInfo self)
+        {
+            return GetAutoTable(self.DeclaringType);
+        }
+        public static AutoDBTable GetAutoTable(this object self)
+        {
+            return GetAutoTable(self.GetType());
+        }
+        public static AutoDBTable GetAutoTable(this Type self)
+        {
+            return self.GetCustomAttribute<AutoDBTable>();
+        }
+        public static object ForDB(object input)
+        {
+            return input ?? Convert.DBNull;
+        }
+        #endregion
+        #region AutoDB Bot Types Helper
+        public static DatabaseDataTypes.GuildMember FromIGuildUser(this IGuildUser self)
+        {
+            return new DatabaseDataTypes.GuildMember(self);
+        }
+        #endregion
 
         public static void PrintException(Exception e)
         {
