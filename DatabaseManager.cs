@@ -7,6 +7,7 @@ using Oracle.ManagedDataAccess.Client;
 using System.Data.Common;
 using System.Threading.Tasks;
 using System.Diagnostics.CodeAnalysis;
+using DismantledBot.DatabaseDataTypes;
 
 namespace DismantledBot
 {
@@ -20,6 +21,7 @@ namespace DismantledBot
             ocsb.Password = CoreProgram.settings.DBPassword;
             ocsb.UserID = CoreProgram.settings.DBUserID;
             ocsb.DataSource = CoreProgram.settings.DataSource;
+            ocsb.StatementCachePurge = true;
             string tnsAdmin = CoreProgram.settings.DBTNSAdminLocation;
             string oHome = Environment.GetEnvironmentVariable("ORACLE_HOME", EnvironmentVariableTarget.Machine);
             if (tnsAdmin.StartsWith("%ORACLE_HOME%"))
@@ -131,38 +133,44 @@ namespace DismantledBot
             }
         }*/
 
-        public void RemoveUser(DatabaseDataTypes.GuildMember user)
+        public void RemoveUser(GuildMember user)
         {
             using(var connection = MakeConnection())
             {
                 connection.Open();
                 OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
-                removeCommand.Parameters.Add("DiscordID", user.DiscordID);
+                removeCommand.Parameters.AddValue(user, "RAWDiscordID");
+                //removeCommand.Parameters.Add("DiscordID", user.DiscordID);
                 removeCommand.ExecuteNonQuery();
             }
         }
 
-        public void AddUser(DatabaseDataTypes.GuildMember user)
+        public void AddUser(GuildMember user)
         {
             using (var connection = MakeConnection())
             {
                 connection.Open();
                 OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
-                insertCommand.Parameters.Add("DiscordID", user.DiscordID);
+                insertCommand.Parameters.AddValue(user, "RAWDiscordID");
+                insertCommand.Parameters.AddValue(user, "Username");
+                insertCommand.Parameters.AddValue(user, "Nickname");
+                /*insertCommand.Parameters.Add("DiscordID", user.DiscordID);
                 insertCommand.Parameters.Add("Username", user.Username);
-                insertCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));
+                insertCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));*/
                 insertCommand.ExecuteNonQuery();
             }
         }
 
-        public void UpdateUser(DatabaseDataTypes.GuildMember user)
+        public void UpdateUser(GuildMember user)
         {
             using (var connection = MakeConnection())
             {
                 connection.Open();
                 OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
-                updateCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));
-                updateCommand.Parameters.Add("DiscordID", user.DiscordID);
+                updateCommand.Parameters.AddValue(user, "Nickname");
+                updateCommand.Parameters.AddValue(user, "RAWDiscordID");
+                //updateCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));
+                //updateCommand.Parameters.Add("DiscordID", user.DiscordID);
                 updateCommand.ExecuteNonQuery();
             }
         }
@@ -172,40 +180,39 @@ namespace DismantledBot
             using(var connection = MakeConnection())
             {
                 // Nickname change (update)
-                List<IGuildUser> updatedNames = new List<IGuildUser>();
+                List<GuildMember> updatedNames = new List<GuildMember>();
                 // Joined server (insert)
-                List<IGuildUser> newNames = new List<IGuildUser>();
+                List<GuildMember> newNames = new List<GuildMember>();
                 // Left/Changed username (delete)
                 List<ulong> missingNames = new List<ulong>();       
 
                 await connection.OpenAsync();
                 OracleCommand getIds = new OracleCommand("SELECT DISCORDID, USERNAME, NICKNAME FROM GUILDMEMBERS", connection);
-                DbDataReader allIds = await getIds.ExecuteReaderAsync();
+                OracleDataReader allIds = getIds.ExecuteReader();
 
-                Dictionary<ulong, string> nickData = new Dictionary<ulong, string>();
-                Dictionary<ulong, string> usernameData = new Dictionary<ulong, string>();
+                HashSet<GuildMember> members = new HashSet<GuildMember>(new GuildMember.Comparer());
                 while (await allIds.ReadAsync())
                 {
-                    byte[] idBytes = (byte[])allIds[0];
-                    ulong discordID = BitConverter.ToUInt64(idBytes);
-                    nickData.Add(discordID, allIds.IsDBNull(2) ? string.Empty : allIds.GetString(2));
-                    usernameData.Add(discordID, allIds.GetString(1));
+                    ulong id = allIds.Get<ulong>(0);
+                    string username = allIds.GetString(1);
+                    string nickname = allIds.IsDBNull(2) ? null : allIds.GetString(2);
+                    members.Add(new GuildMember(id, username, nickname));
                 }
                 allIds.Close();
 
-                
-                missingNames.AddRange(usernameData.Where(x => !users.Any(y => string.Equals(x.Value, y.Username))).Select(x => x.Key));
-                updatedNames.AddRange(users.Where(x =>
-                {
-                    if(!nickData.TryGetValue(x.Id, out string nick))
+                List<GuildMember> modifedUsers = users.Select(x => new GuildMember(x)).ToList();                
+                missingNames.AddRange(members.Where(x => !users.Any(y => string.Equals(x.Username, y.Username))).Select(x => x.DiscordID));
+                updatedNames.AddRange(modifedUsers.Where(x =>
+                {                   
+                    if(!members.TryGetValue(x, out GuildMember value))
                     {
-                        // We have bigger problems, but a false is okay for now
+                        // Bad, but what can we do?
                         return false;
                     }
 
-                    return !string.Equals(nick, x.Nickname ?? "");
+                    return !string.Equals(value.Nickname, x.Nickname);                  
                 }));
-                newNames.AddRange(users.Where(x => !nickData.ContainsKey(x.Id)));
+                newNames.AddRange(modifedUsers.Where(x => !members.Contains(x)));
 
                 if (missingNames.Count + updatedNames.Count + newNames.Count == 0)
                 {
@@ -218,14 +225,14 @@ namespace DismantledBot
                 removeCommand.Transaction = userTransaction;
                 OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
                 updateCommand.Transaction = userTransaction;
-                OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
+                OracleCommand insertCommand = new OracleCommand("INSERT INTO GUILDMEMBERS (DISCORDID, USERNAME, NICKNAME) VALUES (:DISCORDID, :USERNAME, :NICKNAME)", connection);
                 insertCommand.Transaction = userTransaction;
 
                 int deletedRowCount = 0;
                 missingNames.ForEach(x =>
                 {
                     removeCommand.Parameters.Clear();
-                    removeCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x));                    
+                    removeCommand.Parameters.AddValue(x, "RAWDiscordID");
                     deletedRowCount += removeCommand.ExecuteNonQuery();
                 });
                 
@@ -233,8 +240,8 @@ namespace DismantledBot
                 updatedNames.ForEach(x =>
                 {
                     updateCommand.Parameters.Clear();
-                    updateCommand.Parameters.Add("Nickname", x.Nickname == null ? string.Empty : x.Nickname);
-                    updateCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x.Id));
+                    updateCommand.Parameters.AddValue(x, "Nickname");
+                    updateCommand.Parameters.AddValue(x, "RAWDiscordID");
                     updatedRowCount += updateCommand.ExecuteNonQuery();
                 });
 
@@ -242,9 +249,9 @@ namespace DismantledBot
                 newNames.ForEach(x =>
                 {
                     insertCommand.Parameters.Clear();
-                    insertCommand.Parameters.Add("DiscordID", BitConverter.GetBytes(x.Id));
-                    insertCommand.Parameters.Add("Username", x.Username);
-                    insertCommand.Parameters.Add("Nickname", x.Nickname == null ? string.Empty : x.Nickname);
+                    insertCommand.Parameters.AddValue(x, "RAWDiscordID");
+                    insertCommand.Parameters.AddValue(x, "Username");
+                    insertCommand.Parameters.AddValue(x, "Nickname");
                     additionRowCount += insertCommand.ExecuteNonQuery();
                 });
 
@@ -258,10 +265,10 @@ namespace DismantledBot
     namespace DatabaseDataTypes
     {
         [AutoDBTable("GuildMembers")]
-        public sealed class GuildMember : AutoDBBase<GuildMember>
+        public sealed class GuildMember
         {
-            [AutoDBField(OracleDbType.Varchar2, 8, FieldName = "DiscordID")]
-            public byte[] RAWDiscordID { get; private set; }
+            [AutoDBField(OracleDbType.Decimal, 8, FieldName = "DiscordID")]
+            public decimal RAWDiscordID { get; private set; }
 
             [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Username")]
             public string Username { get; private set; }
@@ -270,7 +277,7 @@ namespace DismantledBot
             public string Nickname { get; private set; }
 
             [AutoDBIgnore]
-            public ulong DiscordID { get => BitConverter.ToUInt64(RAWDiscordID); }
+            public ulong DiscordID { get => (ulong)Convert.ChangeType(RAWDiscordID, typeof(ulong)); }
 
             [AutoDBIgnore]
             public string Name { get => Nickname ?? Username; }
@@ -282,19 +289,29 @@ namespace DismantledBot
 
             public GuildMember(IGuildUser user)
             {
-                RAWDiscordID = BitConverter.GetBytes(user.Id);
+                RAWDiscordID = (decimal)Convert.ChangeType(user.Id, typeof(decimal));
                 Username = user.Username;
                 Nickname = user.Nickname;
             }
 
-            public override bool Equals([AllowNull] GuildMember x, [AllowNull] GuildMember y)
+            public GuildMember(ulong id, string username, string nickname)
             {
-                return (x == null && y == null) || (x.DiscordID == y.DiscordID);
+                RAWDiscordID = (decimal)Convert.ChangeType(id, typeof(decimal));
+                Username = username;
+                Nickname = nickname;
             }
 
-            public override int GetHashCode([DisallowNull] GuildMember obj)
+            public class Comparer : IEqualityComparer<GuildMember>
             {
-                return obj.DiscordID.GetHashCode();
+                public bool Equals([AllowNull] GuildMember x, [AllowNull] GuildMember y)
+                {
+                    return (x == null && y == null) || (x.DiscordID == y.DiscordID);
+                }
+
+                public int GetHashCode([DisallowNull] GuildMember obj)
+                {
+                    return obj.DiscordID.GetHashCode();
+                }
             }
         }
     }

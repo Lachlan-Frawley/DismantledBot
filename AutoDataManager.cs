@@ -42,11 +42,4 @@ namespace DismantledBot
     {
 
     }
-
-    public abstract class AutoDBBase<T> : IEqualityComparer<T> where T : AutoDBBase<T>
-    {
-        public abstract bool Equals([AllowNull] T x, [AllowNull] T y);
-
-        public abstract int GetHashCode([DisallowNull] T obj);
-    }
 }

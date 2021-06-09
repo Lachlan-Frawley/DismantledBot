@@ -8,6 +8,7 @@ using Discord;
 using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 using System.Collections;
+using Oracle.ManagedDataAccess.Client;
 
 namespace DismantledBot
 {
@@ -42,6 +43,39 @@ namespace DismantledBot
     public static class Utilities
     {
         private static Random Random = new Random();
+
+        public static OracleParameter AddValue<T>(this OracleParameterCollection self, T obj, string name)
+        {
+            FieldInfo fieldInfo = typeof(T).GetField(name);
+            PropertyInfo propInfo = typeof(T).GetProperty(name);
+            AutoDBField dbFieldInfo = fieldInfo != null ? fieldInfo.GetAutoField() : (propInfo != null ? propInfo.GetAutoField() : null);
+            if (dbFieldInfo == null)
+                return null;
+
+            object fieldValue = fieldInfo != null ? fieldInfo.GetValue(obj) : propInfo.GetValue(obj);
+            OracleParameter param = new OracleParameter()
+            {
+                ParameterName = dbFieldInfo.FieldName ?? (fieldInfo != null ? fieldInfo.Name : propInfo.Name),
+                OracleDbType = dbFieldInfo.FieldType,
+                Size = dbFieldInfo.FieldSize,
+                Value = DBConvert(fieldValue, dbFieldInfo.FieldType)
+            };
+
+            self.Add(param);
+            return param;
+        }
+
+        public static object DBConvert(object input, OracleDbType toType)
+        {
+            switch(toType)
+            {
+                case OracleDbType.Decimal:
+                    return Convert.ChangeType(input, typeof(Decimal));
+            }
+
+            return input;
+        }
+
         #region AutoDB Helper
         public static bool IsValidAutoDBClass(this object self)
         {
