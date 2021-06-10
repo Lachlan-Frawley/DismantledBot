@@ -8,6 +8,7 @@ using System.Data.Common;
 using System.Threading.Tasks;
 using System.Diagnostics.CodeAnalysis;
 using DismantledBot.DatabaseDataTypes;
+using System.Reflection;
 
 namespace DismantledBot
 {
@@ -133,6 +134,69 @@ namespace DismantledBot
             }
         }*/
 
+        public HashSet<T> GetRows<T>(IEqualityComparer<T> comparer)
+        {
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return null;
+
+            HashSet<T> allRows = new HashSet<T>(comparer);
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"Select * From {table.TableName}", connection);
+                using (OracleDataReader reader = query.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
+                        foreach (PropertyInfo property in typeof(T).GetProperties())
+                        {
+                            if (property.GetCustomAttribute<AutoDBIgnore>() != null)
+                                continue;
+                            AutoDBField autoField = property.GetAutoField();
+                            string name = autoField.FieldName ?? property.Name;
+                            if (reader.IsDBNull(name))
+                            {
+                                property.SetValue(myObj, null);
+                                continue;
+                            }
+
+                            object val = reader[name];
+                            val = Convert.ChangeType(val, property.PropertyType);
+                            property.SetValue(myObj, val);
+                        }
+                        foreach (FieldInfo field in typeof(T).GetFields())
+                        {
+                            if (field.GetCustomAttribute<AutoDBIgnore>() != null)
+                                continue;
+                            AutoDBField autoField = field.GetAutoField();
+                            string name = autoField.FieldName ?? field.Name;
+                            if (reader.IsDBNull(name))
+                            {
+                                field.SetValue(myObj, null);
+                                continue;
+                            }
+
+                            object val = reader[name];
+                            val = Convert.ChangeType(val, field.FieldType);
+                            field.SetValue(myObj, val);
+                        }
+                        allRows.Add(myObj);
+                    }
+                }                                
+            }
+            return allRows;
+        }
+
+        public HashSet<T> GetRows<T>(IEqualityComparer<T> comparer, Predicate<T> search)
+        {
+            HashSet<T> rSet = GetRows<T>(comparer);
+            if (rSet == null)
+                return null;
+            return rSet.Where(x => search(x)).ToHashSet();
+        }
+
         public void RemoveUser(GuildMember user)
         {
             using(var connection = MakeConnection())
@@ -140,7 +204,6 @@ namespace DismantledBot
                 connection.Open();
                 OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
                 removeCommand.Parameters.AddValue(user, "RAWDiscordID");
-                //removeCommand.Parameters.Add("DiscordID", user.DiscordID);
                 removeCommand.ExecuteNonQuery();
             }
         }
@@ -154,9 +217,6 @@ namespace DismantledBot
                 insertCommand.Parameters.AddValue(user, "RAWDiscordID");
                 insertCommand.Parameters.AddValue(user, "Username");
                 insertCommand.Parameters.AddValue(user, "Nickname");
-                /*insertCommand.Parameters.Add("DiscordID", user.DiscordID);
-                insertCommand.Parameters.Add("Username", user.Username);
-                insertCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));*/
                 insertCommand.ExecuteNonQuery();
             }
         }
@@ -169,8 +229,6 @@ namespace DismantledBot
                 OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
                 updateCommand.Parameters.AddValue(user, "Nickname");
                 updateCommand.Parameters.AddValue(user, "RAWDiscordID");
-                //updateCommand.Parameters.Add("Nickname", Utilities.ForDB(user.Nickname));
-                //updateCommand.Parameters.Add("DiscordID", user.DiscordID);
                 updateCommand.ExecuteNonQuery();
             }
         }
@@ -184,7 +242,7 @@ namespace DismantledBot
                 // Joined server (insert)
                 List<GuildMember> newNames = new List<GuildMember>();
                 // Left/Changed username (delete)
-                List<ulong> missingNames = new List<ulong>();       
+                List<GuildMember> missingNames = new List<GuildMember>();       
 
                 await connection.OpenAsync();
                 OracleCommand getIds = new OracleCommand("SELECT DISCORDID, USERNAME, NICKNAME FROM GUILDMEMBERS", connection);
@@ -201,7 +259,7 @@ namespace DismantledBot
                 allIds.Close();
 
                 List<GuildMember> modifedUsers = users.Select(x => new GuildMember(x)).ToList();                
-                missingNames.AddRange(members.Where(x => !users.Any(y => string.Equals(x.Username, y.Username))).Select(x => x.DiscordID));
+                missingNames.AddRange(members.Where(x => !users.Any(y => string.Equals(x.Username, y.Username))));
                 updatedNames.AddRange(modifedUsers.Where(x =>
                 {                   
                     if(!members.TryGetValue(x, out GuildMember value))

@@ -46,8 +46,8 @@ namespace DismantledBot
 
         public static OracleParameter AddValue<T>(this OracleParameterCollection self, T obj, string name)
         {
-            FieldInfo fieldInfo = typeof(T).GetField(name);
-            PropertyInfo propInfo = typeof(T).GetProperty(name);
+            FieldInfo fieldInfo = typeof(T).GetField(name, BindingFlags.Public | BindingFlags.Instance);
+            PropertyInfo propInfo = typeof(T).GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
             AutoDBField dbFieldInfo = fieldInfo != null ? fieldInfo.GetAutoField() : (propInfo != null ? propInfo.GetAutoField() : null);
             if (dbFieldInfo == null)
                 return null;
