@@ -44,11 +44,47 @@ namespace DismantledBot
     {
         private static Random Random = new Random();
 
+        public static IEnumerable<AutoDBField> GetAllAutoFields<T>()
+        {
+            List<AutoDBField> autoDBFields = new List<AutoDBField>();
+            if (typeof(T).GetAutoTable() == null)
+                return autoDBFields;
+            foreach(FieldInfo field in typeof(T).GetFields())
+            {
+                if (field.GetCustomAttribute<AutoDBNoWrite>() != null)
+                    continue;
+                AutoDBField aField = field.GetAutoField();
+                if (aField == null)
+                    continue;
+                if (aField.FieldName == null)
+                    aField.FieldName = field.Name;
+                if (aField != null)
+                    autoDBFields.Add(aField);
+            }
+            foreach(PropertyInfo property in typeof(T).GetProperties())
+            {
+                if (property.GetCustomAttribute<AutoDBNoWrite>() != null)
+                    continue;
+                AutoDBField aField = property.GetAutoField();
+                if (aField == null)
+                    continue;
+                if (aField.FieldName == null)
+                    aField.FieldName = property.Name;
+                if (aField != null)
+                    autoDBFields.Add(aField);
+            }
+            return autoDBFields;
+        }
+
         public static OracleParameter AddValue<T>(this OracleParameterCollection self, T obj, string name)
         {
-            FieldInfo fieldInfo = typeof(T).GetField(name, BindingFlags.Public | BindingFlags.Instance);
-            PropertyInfo propInfo = typeof(T).GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            AutoDBField dbFieldInfo = fieldInfo != null ? fieldInfo.GetAutoField() : (propInfo != null ? propInfo.GetAutoField() : null);
+            FieldInfo fieldInfo = typeof(T).GetFields().Where(x => x.GetAutoField() != null).Where(x => string.Equals(x.Name, name) || string.Equals(x.GetAutoField().FieldName, name)).FirstOrDefault();
+            PropertyInfo propInfo = typeof(T).GetProperties().Where(x => x.GetAutoField() != null).Where(x => string.Equals(x.Name, name) || string.Equals(x.GetAutoField().FieldName, name)).FirstOrDefault();
+            AutoDBField dbFieldInfo = null;
+            if (fieldInfo != null)
+                dbFieldInfo = fieldInfo.GetAutoField();
+            if (propInfo != null)
+                dbFieldInfo = propInfo.GetAutoField();
             if (dbFieldInfo == null)
                 return null;
 

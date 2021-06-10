@@ -38,7 +38,7 @@ namespace DismantledBot
     }
 
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
-    public class AutoDBIgnore : Attribute
+    public class AutoDBNoWrite : Attribute
     {
 
     }

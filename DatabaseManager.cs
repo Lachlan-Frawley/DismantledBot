@@ -33,106 +33,56 @@ namespace DismantledBot
             return connection;
         }
 
-        /*public T Get<T>(Predicate<T> search)
+        // TODO
+        public int ModifySingle<T>(T obj, FieldInfo[] updatedFields, FieldInfo[] selectionFields)
         {
-            DBTable table = Attribute.GetCustomAttribute(typeof(T), typeof(DBTable)) as DBTable;
-            if (table == null)
-                return default;
-
-            using(var connection = MakeConnection())
-            {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"SELECT * FROM {table.TableName}", connection);
-                OracleDataReader reader = query.ExecuteReader();
-
-                while(reader.Read())
-                {
-                    T myT = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
-                    foreach(FieldInfo field in typeof(T).GetFields())
-                    {
-                        string fieldName = field.GetCustomAttribute<DBField>().FieldName ?? field.Name;
-                        if (reader.IsDBNull(fieldName))
-                        {
-                            field.SetValue(myT, null);
-                            continue;
-                        }
-
-                        object val = reader[fieldName];
-                        if(field.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
-                        {
-                            val = Utilities.TryBitConversion(val, field.FieldType);
-                        } else if(!val.GetType().IsEquivalentTo(field.FieldType))
-                        {
-                            val = Convert.ChangeType(val, field.FieldType);
-                        }
-                        field.SetValue(myT, val);
-                    }
-                    if (search(myT))
-                        return myT;
-                }
-                reader.Close();
-            }
-
-            return default;
+            return 0;
         }
 
-        public void Insert<T>(T obj)
+        public int Insert<T>(HashSet<T> objects)
         {
-            DBTable table = Attribute.GetCustomAttribute(typeof(T), typeof(DBTable)) as DBTable;
+            AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
-                return;
-
-            List<string> fields = typeof(T).GetFields().Select(x => x.GetCustomAttribute<DBField>().FieldName ?? x.Name).ToList();
-
-            using(var connection = MakeConnection())
-            {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields)}) VALUES ({string.Join(", ", fields.Select(x => $":{x}"))}", connection);
-                foreach(FieldInfo field in typeof(T).GetFields())
-                {
-                    string name = field.GetCustomAttribute<DBField>().FieldName ?? field.Name;
-                    object val = field.GetValue(obj);
-                    if (field.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
-                        val = Utilities.ForwardBitConversion(val);
-                    query.Parameters.Add(name, val);
-                }
-                query.ExecuteNonQuery();
-            }
-        }
-
-        public void Remove<T>(T obj)
-        {
-            // TODO
-            throw new NotImplementedException();
-        }
-
-        public void Update1<T>(FieldInfo searchKey, object searchValue, params (FieldInfo field, object newValue)[] changes)
-        {
-            DBTable table = Attribute.GetCustomAttribute(typeof(T), typeof(DBTable)) as DBTable;
-            if (table == null)
-                return;
-
-            List<string> fields = changes.Select(x => x.field.GetCustomAttribute<DBField>().FieldName ?? x.field.Name).ToList();
-            string searchKeyName = searchKey.GetCustomAttribute<DBField>().FieldName ?? searchKey.Name;
-            if (searchKey.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
-                //searchValue = Utilities.ForwardBitConversion(searchValue);
-
+                return 0;
             using (var connection = MakeConnection())
             {
                 connection.Open();
-                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", fields.Select(x => $"{x} = :{x}"))} WHERE {searchKeyName} = :{searchKeyName}", connection);
-                query.Parameters.Add(searchKeyName, searchValue);
-                foreach((FieldInfo field, object newValue) in changes)
+                var fields = Utilities.GetAllAutoFields<T>();
+                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields.Select(x => x.FieldName))}) VALUES ({string.Join(", ", fields.Select(x => $":{x.FieldName}"))})", connection);
+                OracleTransaction transaction = connection.BeginTransaction();
+                query.Transaction = transaction;
+                int rowsModified = 0;
+                foreach(T obj in objects)
                 {
-                    string name = field.GetCustomAttribute<DBField>().FieldName ?? field.Name;
-                    object val = newValue;
-                    if (field.GetCustomAttribute<DBField>().FieldType == OracleDbType.Raw)
-                        val = Utilities.ForwardBitConversion(val);
-                    query.Parameters.Add(name, val);
-                }              
-                query.ExecuteNonQuery();
+                    query.Parameters.Clear();
+                    foreach (AutoDBField f in fields)
+                    {
+                        query.Parameters.AddValue(obj, f.FieldName);
+                    }
+                    rowsModified += query.ExecuteNonQuery();
+                }
+                transaction.Commit();
+                return rowsModified;
             }
-        }*/
+        }
+
+        public int InsertSingle<T>(T obj)
+        {
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return 0;
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                var fields = Utilities.GetAllAutoFields<T>();
+                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields.Select(x => x.FieldName))}) VALUES ({string.Join(", ", fields.Select(x => $":{x.FieldName}"))})", connection);
+                foreach(AutoDBField f in fields)
+                {
+                    query.Parameters.AddValue(obj, f.FieldName);
+                }
+                return query.ExecuteNonQuery();
+            }
+        }
 
         public HashSet<T> GetRows<T>(IEqualityComparer<T> comparer)
         {
@@ -152,8 +102,6 @@ namespace DismantledBot
                         T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
                         foreach (PropertyInfo property in typeof(T).GetProperties())
                         {
-                            if (property.GetCustomAttribute<AutoDBIgnore>() != null)
-                                continue;
                             AutoDBField autoField = property.GetAutoField();
                             string name = autoField.FieldName ?? property.Name;
                             if (reader.IsDBNull(name))
@@ -168,8 +116,6 @@ namespace DismantledBot
                         }
                         foreach (FieldInfo field in typeof(T).GetFields())
                         {
-                            if (field.GetCustomAttribute<AutoDBIgnore>() != null)
-                                continue;
                             AutoDBField autoField = field.GetAutoField();
                             string name = autoField.FieldName ?? field.Name;
                             if (reader.IsDBNull(name))
@@ -334,10 +280,8 @@ namespace DismantledBot
             [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Nickname")]
             public string Nickname { get; private set; }
 
-            [AutoDBIgnore]
             public ulong DiscordID { get => (ulong)Convert.ChangeType(RAWDiscordID, typeof(ulong)); }
 
-            [AutoDBIgnore]
             public string Name { get => Nickname ?? Username; }
 
             public GuildMember()
@@ -370,6 +314,33 @@ namespace DismantledBot
                 {
                     return obj.DiscordID.GetHashCode();
                 }
+            }
+        }
+
+        [AutoDBTable("GuildTeams")]
+        public sealed class GuildTeams
+        {
+            [AutoDBNoWrite]
+            [AutoDBField(OracleDbType.Decimal, 8, FieldName = "TeamID")]
+            public decimal TeamID { get; private set; }
+            
+            [AutoDBField(OracleDbType.Varchar2, 256, FieldName = "TeamName")]
+            public string TeamName { get; private set; }
+
+            [AutoDBField(OracleDbType.Decimal, 8, FieldName = "TeamLeader")]
+            public decimal RAWTeamLeader { get; private set; }
+
+            public ulong TeamLeader { get => (ulong)Convert.ChangeType(RAWTeamLeader, typeof(ulong)); }
+
+            public GuildTeams()
+            {
+
+            }
+
+            public GuildTeams(string name, ulong leaderID)
+            {
+                TeamName = name;
+                RAWTeamLeader = (decimal)Convert.ChangeType(leaderID, typeof(decimal));
             }
         }
     }
