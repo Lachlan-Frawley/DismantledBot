@@ -33,10 +33,65 @@ namespace DismantledBot
             return connection;
         }
 
-        // TODO
-        public int ModifySingle<T>(T obj, FieldInfo[] updatedFields, FieldInfo[] selectionFields)
+        public int ModifyMultiple<T>(HashSet<T> objects, string[] updatedFields, string[] selectionFields)
         {
-            return 0;
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return 0;
+            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+            var upFields = allFields.Where(x => updatedFields != null && updatedFields.Contains(x.FieldName)).ToList();
+            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+            if (Utilities.ContainsNoWriteField<T>(upFields.Select(x => x.FieldName)))
+                return 0;
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                OracleTransaction transaction = connection.BeginTransaction();
+                query.Transaction = transaction;
+                int modified = 0;
+                foreach(T obj in objects)
+                {
+                    query.Parameters.Clear();
+                    foreach (AutoDBField update in upFields)
+                    {
+                        query.Parameters.AddValue(obj, update.FieldName);
+                    }
+                    foreach (AutoDBField selection in scFields)
+                    {
+                        query.Parameters.AddValue(obj, selection.FieldName);
+                    }
+                    modified += query.ExecuteNonQuery();
+                }
+                transaction.Commit();
+                return modified;
+            }
+        }
+
+        public int ModifySingle<T>(T obj, string[] updatedFields, string[] selectionFields)
+        {
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return 0;
+            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+            var upFields = allFields.Where(x => updatedFields != null && updatedFields.Contains(x.FieldName)).ToList();
+            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+            if (Utilities.ContainsNoWriteField<T>(upFields.Select(x => x.FieldName)))
+                return 0;
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                foreach(AutoDBField update in upFields)
+                {
+                    query.Parameters.AddValue(obj, update.FieldName);
+                }
+                foreach(AutoDBField selection in scFields)
+                {
+                    query.Parameters.AddValue(obj, selection.FieldName);
+                }
+                return query.ExecuteNonQuery();
+            }
         }
 
         public int Insert<T>(HashSet<T> objects)
@@ -103,6 +158,8 @@ namespace DismantledBot
                         foreach (PropertyInfo property in typeof(T).GetProperties())
                         {
                             AutoDBField autoField = property.GetAutoField();
+                            if (autoField == null)
+                                continue;
                             string name = autoField.FieldName ?? property.Name;
                             if (reader.IsDBNull(name))
                             {
@@ -117,6 +174,8 @@ namespace DismantledBot
                         foreach (FieldInfo field in typeof(T).GetFields())
                         {
                             AutoDBField autoField = field.GetAutoField();
+                            if (autoField == null)
+                                continue;
                             string name = autoField.FieldName ?? field.Name;
                             if (reader.IsDBNull(name))
                             {
@@ -272,13 +331,13 @@ namespace DismantledBot
         public sealed class GuildMember
         {
             [AutoDBField(OracleDbType.Decimal, 8, FieldName = "DiscordID")]
-            public decimal RAWDiscordID { get; private set; }
+            public decimal RAWDiscordID;
 
             [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Username")]
-            public string Username { get; private set; }
+            public string Username;
 
             [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Nickname")]
-            public string Nickname { get; private set; }
+            public string Nickname;
 
             public ulong DiscordID { get => (ulong)Convert.ChangeType(RAWDiscordID, typeof(ulong)); }
 
@@ -323,12 +382,12 @@ namespace DismantledBot
             [AutoDBNoWrite]
             [AutoDBField(OracleDbType.Decimal, 8, FieldName = "TeamID")]
             public decimal TeamID { get; private set; }
-            
+
             [AutoDBField(OracleDbType.Varchar2, 256, FieldName = "TeamName")]
-            public string TeamName { get; private set; }
+            public string TeamName;
 
             [AutoDBField(OracleDbType.Decimal, 8, FieldName = "TeamLeader")]
-            public decimal RAWTeamLeader { get; private set; }
+            public decimal RAWTeamLeader;
 
             public ulong TeamLeader { get => (ulong)Convert.ChangeType(RAWTeamLeader, typeof(ulong)); }
 
@@ -341,6 +400,19 @@ namespace DismantledBot
             {
                 TeamName = name;
                 RAWTeamLeader = (decimal)Convert.ChangeType(leaderID, typeof(decimal));
+            }
+
+            public sealed class Comparer : IEqualityComparer<GuildTeams>
+            {
+                public bool Equals([AllowNull] GuildTeams x, [AllowNull] GuildTeams y)
+                {
+                    return (x == null && y == null) || (x.TeamID == y.TeamID);
+                }
+
+                public int GetHashCode([DisallowNull] GuildTeams obj)
+                {
+                    return obj.TeamID.GetHashCode();
+                }
             }
         }
     }

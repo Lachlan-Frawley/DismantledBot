@@ -44,6 +44,60 @@ namespace DismantledBot
     {
         private static Random Random = new Random();
 
+        public static List<T> MakeList<T>(params T[] objects)
+        {
+            return new List<T>(objects);
+        }
+
+        public static T[] MakeArray<T>(params T[] objects)
+        {
+            return objects;
+        }
+
+        public static bool ContainsNoWriteField<T>(IEnumerable<string> fields)
+        {
+            return fields.Any(x => IsNoWriteField<T>(x));
+        }
+
+        public static bool IsNoWriteField<T>(string fieldName)
+        {
+            var field = typeof(T).GetField(fieldName);
+            var property = typeof(T).GetProperty(fieldName);
+            if (field == null && property == null)
+                return false;
+            if (field == null)
+                return property.GetCustomAttribute<AutoDBNoWrite>() != null;
+            return field.GetCustomAttribute<AutoDBNoWrite>() != null;
+        }
+
+        public static IEnumerable<AutoDBField> GetAllAutoFieldsWithNoWrite<T>()
+        {
+            List<AutoDBField> autoDBFields = new List<AutoDBField>();
+            if (typeof(T).GetAutoTable() == null)
+                return autoDBFields;
+            foreach (FieldInfo field in typeof(T).GetFields())
+            {
+                AutoDBField aField = field.GetAutoField();
+                if (aField == null)
+                    continue;
+                if (aField.FieldName == null)
+                    aField.FieldName = field.Name;
+                if (aField != null)
+                    autoDBFields.Add(aField);
+            }
+            foreach (PropertyInfo property in typeof(T).GetProperties())
+            {
+                AutoDBField aField = property.GetAutoField();
+                if (aField == null)
+                    continue;
+                if (aField.FieldName == null)
+                    aField.FieldName = property.Name;
+                if (aField != null)
+                    autoDBFields.Add(aField);
+            }
+            return autoDBFields;
+        }
+
         public static IEnumerable<AutoDBField> GetAllAutoFields<T>()
         {
             List<AutoDBField> autoDBFields = new List<AutoDBField>();
@@ -233,18 +287,18 @@ namespace DismantledBot
             return (T)Convert.ChangeType(self[i], typeof(T));
         }
 
-        public static bool GetOrNull(this Oracle.ManagedDataAccess.Client.OracleDataReader self, string name, out object value)
+        public static bool GetOrNull(this OracleDataReader self, string name, out object value)
         {            
             value = self[name];
             return value != null && value != Convert.DBNull;
         }
 
-        public static T Get<T>(this Oracle.ManagedDataAccess.Client.OracleDataReader self, string name)
+        public static T Get<T>(this OracleDataReader self, string name)
         {
             return (T)Convert.ChangeType(self[name], typeof(T));
         }
 
-        public static T Get<T>(this Oracle.ManagedDataAccess.Client.OracleDataReader self, int i)
+        public static T Get<T>(this OracleDataReader self, int i)
         {
             return (T)Convert.ChangeType(self[i], typeof(T));
         }
