@@ -33,6 +33,53 @@ namespace DismantledBot
             return connection;
         }
 
+        public int DeleteMultiple<T>(HashSet<T> objects, params string[] selectionFields)
+        {
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return 0;
+            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+            using (var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                OracleTransaction transaction = connection.BeginTransaction();
+                query.Transaction = transaction;
+                int deletions = 0;
+                foreach(T obj in objects)
+                {
+                    query.Parameters.Clear();
+                    foreach (AutoDBField selection in scFields)
+                    {
+                        query.Parameters.AddValue(obj, selection.FieldName);
+                    }
+                    deletions += query.ExecuteNonQuery();
+                }
+                transaction.Commit();
+                return deletions;
+            }
+        }
+
+        public int DeleteSingle<T>(T obj, params string[] selectionFields)
+        {
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return 0;
+            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                foreach(AutoDBField selection in scFields)
+                {
+                    query.Parameters.AddValue(obj, selection.FieldName);
+                }
+                return query.ExecuteNonQuery();
+            }
+        }
+
         public int ModifyMultiple<T>(HashSet<T> objects, string[] updatedFields, string[] selectionFields)
         {
             AutoDBTable table = typeof(T).GetAutoTable();
