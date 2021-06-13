@@ -4,10 +4,7 @@ using System.Linq;
 using System.Data;
 using Discord;
 using Oracle.ManagedDataAccess.Client;
-using System.Data.Common;
 using System.Threading.Tasks;
-using System.Diagnostics.CodeAnalysis;
-using DismantledBot.DatabaseDataTypes;
 using System.Reflection;
 
 namespace DismantledBot
@@ -32,7 +29,43 @@ namespace DismantledBot
             connection.ConnectionString = ocsb.ConnectionString;
             return connection;
         }
+        #region Auto Segment 1
+        public int InsertSingleExpressive<T>(T obj)
+        {
+            AutoDBTable table = typeof(T).GetAutoTable();
+            if (table == null)
+                return 0;
+            var allFieldData = Utilities.GetAllAutoDBFieldInformation<T>();
+            var allWriteFields = allFieldData.Where(x => !x.IsNoWrite);
+            List<AutoDBFieldInformation> allMappedWriteFields = new List<AutoDBFieldInformation>();
+            List<AutoDBFieldInformation> multiKeyFields = new List<AutoDBFieldInformation>();
+            List<string> queryFields = new List<string>();
+            // TODO: Work out how to include other objects as foreingn keys?
+            foreach(AutoDBFieldInformation fInfo in allWriteFields)
+            {
+                // If the value is not a foreign key, or is, but is primitive, write it and continue
+                if(!fInfo.IsForiegnKey || fInfo.IsContainingFieldPrimitive)
+                {
+                    allMappedWriteFields.Add(fInfo);
+                    continue;
+                }                
+            }
+            queryFields.AddRange(multiKeyFields.Select(x => x.FieldData.FieldName));
+            queryFields.AddRange(allMappedWriteFields.Select(x => x.FieldData.FieldName));
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", queryFields)}) VALUES ({string.Join(", ", queryFields.Select(x => $":{x}"))})", connection);
+                foreach(AutoDBFieldInformation fInfo in allMappedWriteFields)
+                {
+                    query.Parameters.AddValue(obj, fInfo.FieldData.FieldName);
+                }
+                return query.ExecuteNonQuery();
+            }
+        }
+        #endregion
 
+        #region Auto Segment 0
         public int DeleteMultiple<T>(HashSet<T> objects, params string[] selectionFields)
         {
             AutoDBTable table = typeof(T).GetAutoTable();
@@ -249,6 +282,7 @@ namespace DismantledBot
             return rSet.Where(x => search(x)).ToHashSet();
         }
 
+        #endregion
         public void RemoveUser(GuildMember user)
         {
             using(var connection = MakeConnection())
@@ -369,98 +403,6 @@ namespace DismantledBot
 
                 Console.WriteLine($"Completed guild member data update: Removed {deletedRowCount} rows, Updated {updatedRowCount} rows, Added {additionRowCount} rows");
             };
-        }
-    }
-
-    namespace DatabaseDataTypes
-    {
-        [AutoDBTable("GuildMembers")]
-        public sealed class GuildMember
-        {
-            [AutoDBField(OracleDbType.Decimal, 8, FieldName = "DiscordID")]
-            public decimal RAWDiscordID;
-
-            [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Username")]
-            public string Username;
-
-            [AutoDBField(OracleDbType.Varchar2, 64, FieldName = "Nickname")]
-            public string Nickname;
-
-            public ulong DiscordID { get => (ulong)Convert.ChangeType(RAWDiscordID, typeof(ulong)); }
-
-            public string Name { get => Nickname ?? Username; }
-
-            public GuildMember()
-            {
-
-            }
-
-            public GuildMember(IGuildUser user)
-            {
-                RAWDiscordID = (decimal)Convert.ChangeType(user.Id, typeof(decimal));
-                Username = user.Username;
-                Nickname = user.Nickname;
-            }
-
-            public GuildMember(ulong id, string username, string nickname)
-            {
-                RAWDiscordID = (decimal)Convert.ChangeType(id, typeof(decimal));
-                Username = username;
-                Nickname = nickname;
-            }
-
-            public class Comparer : IEqualityComparer<GuildMember>
-            {
-                public bool Equals([AllowNull] GuildMember x, [AllowNull] GuildMember y)
-                {
-                    return (x == null && y == null) || (x.DiscordID == y.DiscordID);
-                }
-
-                public int GetHashCode([DisallowNull] GuildMember obj)
-                {
-                    return obj.DiscordID.GetHashCode();
-                }
-            }
-        }
-
-        [AutoDBTable("GuildTeams")]
-        public sealed class GuildTeams
-        {
-            [AutoDBNoWrite]
-            [AutoDBField(OracleDbType.Decimal, 8, FieldName = "TeamID")]
-            public decimal TeamID { get; private set; }
-
-            [AutoDBField(OracleDbType.Varchar2, 256, FieldName = "TeamName")]
-            public string TeamName;
-
-            [AutoDBField(OracleDbType.Decimal, 8, FieldName = "TeamLeader")]
-            public decimal RAWTeamLeader;
-
-            public ulong TeamLeader { get => (ulong)Convert.ChangeType(RAWTeamLeader, typeof(ulong)); }
-
-            public GuildTeams()
-            {
-
-            }
-
-            public GuildTeams(string name, ulong leaderID)
-            {
-                TeamName = name;
-                RAWTeamLeader = (decimal)Convert.ChangeType(leaderID, typeof(decimal));
-            }
-
-            public sealed class Comparer : IEqualityComparer<GuildTeams>
-            {
-                public bool Equals([AllowNull] GuildTeams x, [AllowNull] GuildTeams y)
-                {
-                    return (x == null && y == null) || (x.TeamID == y.TeamID);
-                }
-
-                public int GetHashCode([DisallowNull] GuildTeams obj)
-                {
-                    return obj.TeamID.GetHashCode();
-                }
-            }
         }
     }
 }

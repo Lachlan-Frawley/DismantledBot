@@ -70,6 +70,21 @@ namespace DismantledBot
             return field.GetCustomAttribute<AutoDBNoWrite>() != null;
         }
 
+        public static IEnumerable<AutoDBFieldInformation> GetAutoDBFieldInformation(Type t)
+        {
+            List<AutoDBFieldInformation> info = new List<AutoDBFieldInformation>();
+            if (t == null || t.GetAutoTable() == null)
+                return info;
+            info.AddRange(t.GetFields().Where(x => x.GetAutoField() != null).Select(x => new AutoDBFieldInformation(x)));
+            info.AddRange(t.GetProperties().Where(x => x.GetAutoField() != null).Select(x => new AutoDBFieldInformation(x)));
+            return info;
+        }
+
+        public static IEnumerable<AutoDBFieldInformation> GetAllAutoDBFieldInformation<T>()
+        {
+            return GetAutoDBFieldInformation(typeof(T));
+        }
+
         public static IEnumerable<AutoDBField> GetAllAutoFieldsWithNoWrite<T>()
         {
             List<AutoDBField> autoDBFields = new List<AutoDBField>();
@@ -206,9 +221,9 @@ namespace DismantledBot
         }
         #endregion
         #region AutoDB Bot Types Helper
-        public static DatabaseDataTypes.GuildMember FromIGuildUser(this IGuildUser self)
+        public static GuildMember FromIGuildUser(this IGuildUser self)
         {
-            return new DatabaseDataTypes.GuildMember(self);
+            return new GuildMember(self);
         }
         #endregion
 
