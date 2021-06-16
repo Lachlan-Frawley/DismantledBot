@@ -29,41 +29,32 @@ namespace DismantledBot
             connection.ConnectionString = ocsb.ConnectionString;
             return connection;
         }
-        #region Auto Segment 1
-        public int InsertSingleExpressive<T>(T obj)
+
+        public HashSet<T> PerformSelection<T>(string query)
         {
-            AutoDBTable table = typeof(T).GetAutoTable();
-            if (table == null)
-                return 0;
-            var allFieldData = Utilities.GetAllAutoDBFieldInformation<T>();
-            var allWriteFields = allFieldData.Where(x => !x.IsNoWrite);
-            List<AutoDBFieldInformation> allMappedWriteFields = new List<AutoDBFieldInformation>();
-            List<AutoDBFieldInformation> multiKeyFields = new List<AutoDBFieldInformation>();
-            List<string> queryFields = new List<string>();
-            // TODO: Work out how to include other objects as foreingn keys?
-            foreach(AutoDBFieldInformation fInfo in allWriteFields)
-            {
-                // If the value is not a foreign key, or is, but is primitive, write it and continue
-                if(!fInfo.IsForiegnKey || fInfo.IsContainingFieldPrimitive)
-                {
-                    allMappedWriteFields.Add(fInfo);
-                    continue;
-                }                
-            }
-            queryFields.AddRange(multiKeyFields.Select(x => x.FieldData.FieldName));
-            queryFields.AddRange(allMappedWriteFields.Select(x => x.FieldData.FieldName));
+            if (!Utilities.IsValidAutoDBClass(typeof(T)))
+                return null;
+            IEqualityComparer<T> comparer = Utilities.GetDBClassComparer<T>();
+            HashSet<T> queryReturn = new HashSet<T>(comparer);
+            var allInfo = Utilities.GetAllAutoDBFieldInformation<T>();
             using(var connection = MakeConnection())
             {
                 connection.Open();
-                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", queryFields)}) VALUES ({string.Join(", ", queryFields.Select(x => $":{x}"))})", connection);
-                foreach(AutoDBFieldInformation fInfo in allMappedWriteFields)
+                OracleCommand command = new OracleCommand(query, connection);
+                OracleDataReader reader = command.ExecuteReader();
+                while(reader.Read())
                 {
-                    query.Parameters.AddValue(obj, fInfo.FieldData.FieldName);
+                    T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
+                    foreach(AutoDBFieldInformation info in allInfo)
+                    {
+                        object retrieved = reader[info.FieldData.FieldName];
+                        info.SetValue(myObj, retrieved);
+                    }
+                    queryReturn.Add(myObj);
                 }
-                return query.ExecuteNonQuery();
             }
+            return queryReturn;
         }
-        #endregion
 
         #region Auto Segment 0
         public int DeleteMultiple<T>(HashSet<T> objects, params string[] selectionFields)

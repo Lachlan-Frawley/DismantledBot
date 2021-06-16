@@ -182,6 +182,14 @@ namespace DismantledBot
         }
 
         #region AutoDB Helper
+        public static IEqualityComparer<T> GetDBClassComparer<T>()
+        {
+            Type t = typeof(T);
+            Type[] nestedTypes = t.GetNestedTypes();
+            Type comp = nestedTypes.First();
+            object comparer = comp.GetConstructor(new Type[] { }).Invoke(null);
+            return (IEqualityComparer<T>)comparer;
+        }
         public static bool IsValidAutoDBClass(this object self)
         {
             return IsValidAutoDBClass(self.GetType());
@@ -189,7 +197,8 @@ namespace DismantledBot
         public static bool IsValidAutoDBClass(this Type self)
         {            
             AutoDBTable table = self.GetAutoTable();
-            return table != null && !string.IsNullOrEmpty(table.TableName) && self.GetConstructor(new Type[] { }) != null;
+            Type[] nestedTypes = self.GetNestedTypes();
+            return table != null && !string.IsNullOrEmpty(table.TableName) && self.GetConstructor(new Type[] { }) != null && nestedTypes.Length != 0 && nestedTypes.First().IsSubclassOf(typeof(IEqualityComparer)) && nestedTypes.First().GetConstructor(new Type[] { }) != null;
         }
         public static AutoDBField GetAutoField(this PropertyInfo self)
         {

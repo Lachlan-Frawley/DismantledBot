@@ -3,6 +3,7 @@ using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 
 namespace DismantledBot
 {
@@ -102,16 +103,48 @@ namespace DismantledBot
     public sealed class TeamMember
     {
         [AutoDBIsPrimaryKey]
-        [AutoDBIsForiegnKey(typeof(GuildTeams), "TeamID")]
         [AutoDBMultiKey(OracleDbType.Decimal, "TeamID")]
-        public GuildTeams Team { get; private set; }
+        public decimal TeamID { get; private set; }
+        private GuildTeams _Team = null;
 
         [AutoDBIsPrimaryKey]
-        [AutoDBIsForiegnKey(typeof(GuildMember), "DiscordID")]
         [AutoDBMultiKey(OracleDbType.Decimal, "DiscordID")]
-        public GuildMember GuildMember { get; private set; }
+        public ulong DiscordID { get; private set; }
+        private GuildMember _User = null;
+        
+        public GuildTeams Team { get
+            {
+                if(_Team == null)
+                {
+                    _Team = CoreProgram.database.PerformSelection<GuildTeams>($"Select * From {typeof(GuildTeams).GetAutoTable().TableName} Where TeamID = {TeamID}").First();
+                }
 
-        public decimal TeamID { get => Team.TeamID; }
-        public ulong DiscordID { get => GuildMember.DiscordID; } 
+                return _Team;
+            } 
+        }
+
+        public GuildMember User { get
+            {
+                if (_User == null)
+                {
+                    _User = CoreProgram.database.PerformSelection<GuildMember>($"Select * From {typeof(GuildMember).GetAutoTable().TableName} Where DiscordID = {DiscordID}").First();
+                }
+
+                return _User;
+            }
+        }
+
+        public class Comparer : IEqualityComparer<TeamMember>
+        {
+            public bool Equals([AllowNull] TeamMember x, [AllowNull] TeamMember y)
+            {
+                return (x == null && y == null) || (x.DiscordID == y.DiscordID);
+            }
+
+            public int GetHashCode([DisallowNull] TeamMember obj)
+            {
+                return obj.DiscordID.GetHashCode();
+            }
+        }
     }
 }
