@@ -29,7 +29,14 @@ namespace DismantledBot
             client = new DiscordSocketClient(new DiscordSocketConfig()
             {
                 AlwaysDownloadUsers = true,
-                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.GuildMessages | GatewayIntents.Guilds | GatewayIntents.DirectMessages | GatewayIntents.DirectMessageReactions | GatewayIntents.GuildMessageReactions,
+                GatewayIntents = 
+                GatewayIntents.GuildVoiceStates |
+                GatewayIntents.GuildMembers | 
+                GatewayIntents.GuildMessages | 
+                GatewayIntents.Guilds | 
+                GatewayIntents.DirectMessages |
+                GatewayIntents.DirectMessageReactions |
+                GatewayIntents.GuildMessageReactions,
                 LargeThreshold = 250
             });
             client.Log += Log;
@@ -100,6 +107,18 @@ namespace DismantledBot
             {
                 return GuildMemberChanged(user, null);
             };
+            client.UserVoiceStateUpdated += Client_UserVoiceStateUpdated;
+            client.ReactionAdded += Client_ReactionAdded;
+        }
+
+        private Task Client_ReactionAdded(Cacheable<IUserMessage, ulong> message, ISocketMessageChannel channel, SocketReaction reaction)
+        {
+            return Task.CompletedTask;
+        }
+
+        private Task Client_UserVoiceStateUpdated(SocketUser user, SocketVoiceState previous, SocketVoiceState current)
+        {
+            return Task.CompletedTask;
         }
 
         private Task GuildMemberChanged(SocketGuildUser before, SocketGuildUser after)

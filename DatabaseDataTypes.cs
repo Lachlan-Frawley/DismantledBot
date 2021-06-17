@@ -147,4 +147,45 @@ namespace DismantledBot
             }
         }
     }
+
+    [AutoDBTable("AdminRoles")]
+    public sealed class AdminRoleInfo
+    {
+        [AutoDBIsPrimaryKey]
+        [AutoDBField(OracleDbType.Decimal, 8, FieldName = "RoleID")]
+        public decimal _RoleID { get; private set; }
+
+        public ulong RoleID { get => (ulong)Convert.ChangeType(_RoleID, typeof(ulong)); }
+
+        [AutoDBField(OracleDbType.Varchar2, 256, FieldName = "RoleName")]
+        public string RoleName { get; private set; }
+
+        [AutoDBField(OracleDbType.Decimal, 8, FieldName = "RoleOrder")]
+        public decimal RoleOrder { get; private set; }
+
+        public AdminRoleInfo()
+        {
+
+        }
+
+        public AdminRoleInfo(ulong id, string name, int order)
+        {
+            _RoleID = id;
+            RoleName = name;
+            RoleOrder = order;
+        }
+
+        public class Converter : IEqualityComparer<AdminRoleInfo>
+        {
+            public bool Equals([AllowNull] AdminRoleInfo x, [AllowNull] AdminRoleInfo y)
+            {
+                return (x == null && y == null) || (x.RoleID == y.RoleID);
+            }
+
+            public int GetHashCode([DisallowNull] AdminRoleInfo obj)
+            {
+                return obj.RoleID.GetHashCode();
+            }
+        }
+    }
 }

@@ -46,7 +46,7 @@ namespace DismantledBot
 
         private void Write(string value)
         {
-            File.AppendAllText(LogFile, value);
+            File.AppendAllText(LogFile, $"\n{value}");
         }
     }
 }
