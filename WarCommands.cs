@@ -47,6 +47,7 @@ namespace DismantledBot
             TimeUntilNextWar.Elapsed += TimeUntilNextWar_Elapsed;
             TimeUntilWarEnd.Elapsed += TimeUntilWarEnd_Elapsed;
             TimeUntilNextWar.Start();
+            CoreProgram.logger.Write2(Logger.DEBUG, $"Started wartimer, {TimeUntilNextWar.TimeLeft} ms remaining");
         }
 
         public static void AddUserIntoAttendance(ulong id)
@@ -63,6 +64,7 @@ namespace DismantledBot
             TimeUntilNextWar.Stop();
             inChannel = GetMembersInWarChannels();
             IsRecordingWar = true;
+            CoreProgram.logger.Write2(Logger.DEBUG, "Now recording war!!");
         }
 
         public async static void TimeUntilWarEnd_Elapsed(object sender, System.Timers.ElapsedEventArgs e)

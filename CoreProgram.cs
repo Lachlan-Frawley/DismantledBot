@@ -63,6 +63,7 @@ namespace DismantledBot
                 try
                 {
                     await database.ManageGuildMembers(new List<IGuildUser>(users));
+                    WarUtility.Initialize();
                 } catch(Exception e)
                 {
                     Utilities.PrintException(e);
