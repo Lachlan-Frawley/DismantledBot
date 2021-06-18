@@ -28,6 +28,8 @@ namespace DismantledBot
         {
             public const string GET_OWNER_FUNC = "GET_OWNER_FUNC";
             public const string GET_ADMIN_FUNC = "GET_ADMIN_FUNC";
+            public const string GET_GUILD_MEMBER_FUNC = "GET_GUILD_MEMBER_FUNC";
+            public const string GET_OFFICER_FUNC = "GET_OFFICER_FUNC";
         }
 
         public static class Implementations
@@ -40,6 +42,16 @@ namespace DismantledBot
             public static Func<ulong> GET_ADMIN_FUNC = () =>
             {
                 return CoreProgram.settings.AdminID;
+            };
+
+            public static Func<ulong> GET_GUILD_MEMBER_FUNC = () =>
+            {
+                return SettingsModule.settings.GetData<ulong>(Names.GET_GUILD_MEMBER_FUNC);
+            };
+
+            public static Func<ulong> GET_OFFICER_FUNC = () =>
+            {
+                return SettingsModule.settings.GetData<ulong>(Names.GET_OFFICER_FUNC);
             };
         }
     }

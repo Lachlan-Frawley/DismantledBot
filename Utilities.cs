@@ -44,6 +44,14 @@ namespace DismantledBot
     {
         private static Random Random = new Random();
 
+        public static T Find<T>(this HashSet<T> self, Func<T, bool> predicate)
+        {
+            var predWhere = self.Where(predicate);
+            if (predWhere == null || predWhere.Count() == 0)
+                return default;
+            return predWhere.First();
+        }
+
         public static List<T> MakeList<T>(params T[] objects)
         {
             return new List<T>(objects);
@@ -198,7 +206,7 @@ namespace DismantledBot
         {            
             AutoDBTable table = self.GetAutoTable();
             Type[] nestedTypes = self.GetNestedTypes();
-            return table != null && !string.IsNullOrEmpty(table.TableName) && self.GetConstructor(new Type[] { }) != null && nestedTypes.Length != 0 && nestedTypes.First().IsSubclassOf(typeof(IEqualityComparer)) && nestedTypes.First().GetConstructor(new Type[] { }) != null;
+            return table != null && !string.IsNullOrEmpty(table.TableName) && self.GetConstructor(new Type[] { }) != null && nestedTypes.Length != 0 && nestedTypes.First().GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEqualityComparer<>)) && nestedTypes.First().GetConstructor(new Type[] { }) != null;
         }
         public static AutoDBField GetAutoField(this PropertyInfo self)
         {

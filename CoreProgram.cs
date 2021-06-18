@@ -95,7 +95,7 @@ namespace DismantledBot
 
         public async Task InstallCommandsAsync()
         {
-            client.MessageReceived += Client_MessageReceived;          
+            client.MessageReceived += Client_MessageReceived;
             Modules = (await commands.AddModulesAsync(Assembly.GetEntryAssembly(), null)).ToList();
 
             client.GuildMemberUpdated += GuildMemberChanged;
@@ -109,15 +109,36 @@ namespace DismantledBot
             };
             client.UserVoiceStateUpdated += Client_UserVoiceStateUpdated;
             client.ReactionAdded += Client_ReactionAdded;
+            client.MessageDeleted += Client_MessageDeleted;            
+        }
+
+        private Task Client_MessageDeleted(Cacheable<IMessage, ulong> message, ISocketMessageChannel channel)
+        {
+            if(channel.Id == SettingsModule.settings.GetData<ulong>(SettingsModule.EVENT_SIGNUP_KEY))
+            {
+                WarUtility.HandleDeletedEventMessage(message, channel);
+            }
+
+            return Task.CompletedTask;
         }
 
         private Task Client_ReactionAdded(Cacheable<IUserMessage, ulong> message, ISocketMessageChannel channel, SocketReaction reaction)
         {
+            if(channel.Id == SettingsModule.settings.GetData<ulong>(SettingsModule.EVENT_SIGNUP_KEY))
+            {
+                WarUtility.HandleSignupReact(message, channel, reaction);
+            }
+
             return Task.CompletedTask;
         }
 
         private Task Client_UserVoiceStateUpdated(SocketUser user, SocketVoiceState previous, SocketVoiceState current)
         {
+            if(current.VoiceChannel != null && current.VoiceChannel.CategoryId.HasValue && current.VoiceChannel.CategoryId.Value == SettingsModule.settings.GetData<ulong>(SettingsModule.WAR_CATEGORY_KEY))
+            {
+                WarUtility.AddUserIntoAttendance(user.Id);
+            }
+
             return Task.CompletedTask;
         }
 
@@ -125,6 +146,35 @@ namespace DismantledBot
         {
             if (before != null && after != null)
             {
+                try
+                {
+                    var preRoles = before.Roles.Select(x => x.Id);
+                    var postRoles = after.Roles.Select(x => x.Id);
+                    var teamRoles = CoreProgram.database.GetRows(new GuildTeams.Comparer()).Select(x => (ulong)x.TeamRole);
+                    var preTeamRoles = preRoles.Where(x => teamRoles.Contains(x));
+                    var postTeamRoles = postRoles.Where(x => teamRoles.Contains(x));
+
+                    var removedTeamRoles = preTeamRoles.Except(postTeamRoles);
+                    var addedTeamRoles = postTeamRoles.Except(preTeamRoles);
+
+                    if (removedTeamRoles.Count() + addedTeamRoles.Count() != 0)
+                    {
+                        foreach (ulong removedRole in removedTeamRoles)
+                        {
+                            CoreProgram.database.DeleteSingle(new TeamMember(removedRole, after.Id), "TeamID", "DiscordID");
+                        }
+                        foreach (ulong addedRole in addedTeamRoles)
+                        {
+                            CoreProgram.database.InsertSingle(new TeamMember(addedRole, after.Id));
+                        }
+                    }
+
+                    CoreProgram.logger.Write2(Logger.DEBUG, $"Modified {after}, added {addedTeamRoles.Count()} team roles, removed {removedTeamRoles.Count()} team roles...");
+                } catch(Exception e)
+                {
+                    CoreProgram.logger.Write2(Logger.WARNING, e.Message);
+                }
+
                 if (before.Id == after.Id && string.Equals(before.Username, after.Username) && string.Equals(before.Nickname, after.Nickname))
                     return Task.CompletedTask;
                 CoreProgram.logger.Write2(Logger.DEBUG, $"User Updated: {after}");
@@ -147,6 +197,12 @@ namespace DismantledBot
 
         private async Task Client_MessageReceived(SocketMessage arg)
         {
+            if(arg.Channel != null && arg.Channel.Id == SettingsModule.settings.GetData<ulong>(SettingsModule.EVENT_SIGNUP_KEY))
+            {
+                WarUtility.HandleNewEventMessage(arg);
+                return;
+            }
+
             var message = arg as SocketUserMessage;
             if (message == null)
                 return;

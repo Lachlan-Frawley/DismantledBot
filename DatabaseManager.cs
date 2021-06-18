@@ -29,7 +29,18 @@ namespace DismantledBot
             connection.ConnectionString = ocsb.ConnectionString;
             return connection;
         }
-
+        public void InsertAttendance(CurrentEventSignupData signupInfo)
+        {
+            using(var connection = MakeConnection())
+            {
+                connection.Open();
+                OracleCommand maxOrderQuery = new OracleCommand($"SELECT MAX(SIGNUPORDER) FROM {typeof(CurrentEventSignupData).GetAutoTable().TableName} WHERE EVENTDATE = :EVENTDATE", connection);
+                maxOrderQuery.Parameters.Add("EVENTDATE", OracleDbType.TimeStamp, signupInfo.EventDate, ParameterDirection.Input);
+                decimal maxOrder = (decimal)maxOrderQuery.ExecuteScalar() + 1;
+                signupInfo.SignupOrder = maxOrder;
+            }
+            InsertSingle(signupInfo);
+        }
         public HashSet<T> PerformSelection<T>(string query)
         {
             if (!Utilities.IsValidAutoDBClass(typeof(T)))
@@ -37,21 +48,31 @@ namespace DismantledBot
             IEqualityComparer<T> comparer = Utilities.GetDBClassComparer<T>();
             HashSet<T> queryReturn = new HashSet<T>(comparer);
             var allInfo = Utilities.GetAllAutoDBFieldInformation<T>();
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand command = new OracleCommand(query, connection);
-                OracleDataReader reader = command.ExecuteReader();
-                while(reader.Read())
+                using (var connection = MakeConnection())
                 {
-                    T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
-                    foreach(AutoDBFieldInformation info in allInfo)
+                    connection.Open();
+                    OracleCommand command = new OracleCommand(query, connection);
+                    OracleDataReader reader = command.ExecuteReader();
+                    while (reader.Read())
                     {
-                        object retrieved = reader[info.FieldData.FieldName];
-                        info.SetValue(myObj, retrieved);
+                        T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
+                        foreach (AutoDBFieldInformation info in allInfo)
+                        {
+                            object retrieved = reader[info.FieldData.FieldName];
+                            if(retrieved == DBNull.Value)
+                                info.SetValue(myObj, null);
+                            else
+                                info.SetValue(myObj, retrieved);
+                        }
+                        queryReturn.Add(myObj);
                     }
-                    queryReturn.Add(myObj);
                 }
+            } catch(Exception e)
+            {
+                Utilities.PrintException(e);
+                throw e;
             }
             return queryReturn;
         }
@@ -67,7 +88,7 @@ namespace DismantledBot
             using (var connection = MakeConnection())
             {
                 connection.Open();
-                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
                 OracleTransaction transaction = connection.BeginTransaction();
                 query.Transaction = transaction;
                 int deletions = 0;
@@ -95,7 +116,7 @@ namespace DismantledBot
             using(var connection = MakeConnection())
             {
                 connection.Open();
-                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
                 foreach(AutoDBField selection in scFields)
                 {
                     query.Parameters.AddValue(obj, selection.FieldName);
@@ -117,7 +138,7 @@ namespace DismantledBot
             using(var connection = MakeConnection())
             {
                 connection.Open();
-                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
                 OracleTransaction transaction = connection.BeginTransaction();
                 query.Transaction = transaction;
                 int modified = 0;
@@ -152,7 +173,7 @@ namespace DismantledBot
             using(var connection = MakeConnection())
             {
                 connection.Open();
-                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(", ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
                 foreach(AutoDBField update in upFields)
                 {
                     query.Parameters.AddValue(obj, update.FieldName);
@@ -269,7 +290,7 @@ namespace DismantledBot
         {
             HashSet<T> rSet = GetRows<T>(comparer);
             if (rSet == null)
-                return null;
+                return new HashSet<T>();
             return rSet.Where(x => search(x)).ToHashSet();
         }
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Globalization;
+using Newtonsoft.Json.Linq;
 
 namespace DismantledBot
 {
@@ -63,6 +64,20 @@ namespace DismantledBot
                 Utilities.PrintException(e);
                 throw e;
             }
+        }
+
+        public LType GetList<LType>(string key, LType def)
+        {
+            if(!data.TryGetValue(key, out object val))
+            {
+                return def;
+            }
+
+            JArray arr = val as JArray;
+            if (arr == null)
+                return def;
+
+            return JsonConvert.DeserializeObject<LType>(arr.ToString());
         }
       
         public P GetDataOrDefault<P>(string key, P def)
