@@ -182,8 +182,8 @@ namespace DismantledBot
                 builder.Title = "Nodewar Attendance";
                 DateTime warDT = target.EventDate;
                 ZonedDateTime zdt = new ZonedDateTime(Instant.FromUtc(warDT.Year, warDT.Month, warDT.Day, warDT.Hour, warDT.Minute), DateTimeZone.Utc);
-                LocalDateTime realDT = Utilities.ConvertDateTimeToDifferentTimeZone(zdt.LocalDateTime, zdt.Zone.Id, DateTimeZoneProviders.Tzdb["CST6CDT"].Id);
-                builder.Description = $"{realDT.ToDateTimeUnspecified().ToShortDateString()}";
+                DateTime realDT = Utilities.ConvertDateTimeToDifferentTimeZone(zdt.LocalDateTime, zdt.Zone.Id, DateTimeZoneProviders.Tzdb["CST6CDT"].Id).ToDateTimeUnspecified();
+                builder.Description = $"{realDT.DayOfWeek}, {realDT.ToShortDateString()}";
                 string attendanceReply = "-";
                 string teamAttendanceReply = "-";
                 if (attendanceData.Count != 0)

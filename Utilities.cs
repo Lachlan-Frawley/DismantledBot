@@ -344,7 +344,7 @@ namespace DismantledBot
             ZonedDateTime fromZoned = fromLocal.InZoneLeniently(fromZone);
 
             DateTimeZone toZone = DateTimeZoneProviders.Tzdb[toZoneId];
-            ZonedDateTime toZoned = fromZoned.WithZone(fromZone);
+            ZonedDateTime toZoned = fromZoned.WithZone(toZone);
             return toZoned.LocalDateTime;
         }
 

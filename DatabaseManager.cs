@@ -36,8 +36,11 @@ namespace DismantledBot
                 connection.Open();
                 OracleCommand maxOrderQuery = new OracleCommand($"SELECT MAX(SIGNUPORDER) FROM {typeof(CurrentEventSignupData).GetAutoTable().TableName} WHERE EVENTDATE = :EVENTDATE", connection);
                 maxOrderQuery.Parameters.Add("EVENTDATE", OracleDbType.TimeStamp, signupInfo.EventDate, ParameterDirection.Input);
-                decimal maxOrder = (decimal)maxOrderQuery.ExecuteScalar() + 1;
-                signupInfo.SignupOrder = maxOrder;
+                object maxOrder = maxOrderQuery.ExecuteScalar();
+                if(maxOrder == DBNull.Value)
+                    signupInfo.SignupOrder = 0;
+                else
+                    signupInfo.SignupOrder = (decimal)maxOrder;
             }
             InsertSingle(signupInfo);
         }

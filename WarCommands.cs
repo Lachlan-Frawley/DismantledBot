@@ -24,12 +24,15 @@ namespace DismantledBot
             HashSet<EventData> foundEvents = CoreProgram.database.GetRows(new EventData.Comparer());
             var now = DateTime.UtcNow;
             var minTimespan = foundEvents.Min(x => x.EventDate - now);
-            var minTime = minTimespan.TotalMilliseconds;
+            var minTime = minTimespan.TotalMilliseconds - TimeSpan.FromMinutes(30).TotalMilliseconds;
             currentWar = foundEvents.ToList().Find(x => x.EventDate - now == minTimespan);
-            var endTime = minTime + TimeSpan.FromHours(2.5).TotalMilliseconds;
+            var endTime = TimeSpan.FromHours(2.5).TotalMilliseconds;
 
             if (minTime < 0)
+            {
+                endTime += minTime;
                 minTime = 0;
+            }
             if (endTime < 0)
                 endTime = 0;
 
@@ -94,8 +97,8 @@ namespace DismantledBot
             builder.Title = "Nodewar Attendance";
             DateTime warDT = currentWar.EventDate;
             ZonedDateTime zdt = new ZonedDateTime(Instant.FromUtc(warDT.Year, warDT.Month, warDT.Day, warDT.Hour, warDT.Minute), DateTimeZone.Utc);
-            LocalDateTime realDT = Utilities.ConvertDateTimeToDifferentTimeZone(zdt.LocalDateTime, zdt.Zone.Id, DateTimeZoneProviders.Tzdb["CST6CDT"].Id);
-            builder.Description = $"{realDT.ToDateTimeUnspecified().ToShortDateString()}";
+            DateTime realDT = Utilities.ConvertDateTimeToDifferentTimeZone(zdt.LocalDateTime, zdt.Zone.Id, DateTimeZoneProviders.Tzdb["CST6CDT"].Id).ToDateTimeUnspecified();
+            builder.Description = $"{realDT.DayOfWeek}, {realDT.ToShortDateString()}";
             builder.AddField("Team Attendance", string.Join("\n", attendanceData.Select(x => $"{x.Key.TeamName}: {x.Value.Count}")));
             builder.AddField("Attendance", string.Join("\n", attendedMembers.Select(x => x.Name)));
 
@@ -320,6 +323,15 @@ namespace DismantledBot
             await ReplyAsync($"Next War: {nextWar.EventName}");
             string untilNextFormatted = string.Format("{0:%d} day(s), {0:%h} hours, {0:%m} minutes", minTime);
             await ReplyAsync($"Time until next war: {untilNextFormatted}");
+            TimerPlus nextTimer = typeof(WarUtility).GetField("TimeUntilNextWar", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static).GetValue(null) as TimerPlus;
+            if(nextTimer == null)
+            {
+                CoreProgram.logger.Write2(Logger.WARNING, "Error finding timer!");
+                return;
+            }
+            double toNext = nextTimer.TimeLeft;
+            untilNextFormatted = string.Format("{0:%d} day(s), {0:%h} hours, {0:%m} minutes", new TimeSpan(0, 0, 0, 0, (int)toNext));
+            await ReplyAsync($"Internal Clock Remaining Time: {untilNextFormatted}");
         }
     }
 }
