@@ -67,6 +67,7 @@ namespace DismantledBot
             TimeUntilNextWar.Stop();
             inChannel = GetMembersInWarChannels();
             IsRecordingWar = true;
+            TimeUntilWarEnd.Start();
             CoreProgram.logger.Write2(Logger.DEBUG, "Now recording war!!");
         }
 
@@ -137,9 +138,14 @@ namespace DismantledBot
             if (target == null)
                 return;
 
+            HashSet<CurrentEventSignupData> currentData = CoreProgram.database.GetRows(new CurrentEventSignupData.Comparer(), x => x.EventDate == target.EventDate);
+            HashSet<PreviousEventSignupData> previousData = currentData.Select(x => new PreviousEventSignupData(x, "UNKNOWN")).ToHashSet();
+
+            CoreProgram.database.DeleteMultiple(currentData, "DiscordID", "EventDate");
             CoreProgram.database.DeleteSingle(target, "EventDate");
             PreviousEventData archiveData = new PreviousEventData(target);
             CoreProgram.database.InsertSingle(archiveData);
+            CoreProgram.database.InsertMultiple(previousData);
             Initialize();
         }
 

@@ -31,16 +31,23 @@ namespace DismantledBot
         }
         public void InsertAttendance(CurrentEventSignupData signupInfo)
         {
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand maxOrderQuery = new OracleCommand($"SELECT MAX(SIGNUPORDER) FROM {typeof(CurrentEventSignupData).GetAutoTable().TableName} WHERE EVENTDATE = :EVENTDATE", connection);
-                maxOrderQuery.Parameters.Add("EVENTDATE", OracleDbType.TimeStamp, signupInfo.EventDate, ParameterDirection.Input);
-                object maxOrder = maxOrderQuery.ExecuteScalar();
-                if(maxOrder == DBNull.Value)
-                    signupInfo.SignupOrder = 0;
-                else
-                    signupInfo.SignupOrder = (decimal)maxOrder;
+                using (var connection = MakeConnection())
+                {
+                    connection.Open();
+                    OracleCommand maxOrderQuery = new OracleCommand($"SELECT MAX(SIGNUPORDER) FROM {typeof(CurrentEventSignupData).GetAutoTable().TableName} WHERE EVENTDATE = :EVENTDATE", connection);
+                    maxOrderQuery.Parameters.Add("EVENTDATE", OracleDbType.TimeStamp, signupInfo.EventDate, ParameterDirection.Input);
+                    object maxOrder = maxOrderQuery.ExecuteScalar();
+                    if (maxOrder == DBNull.Value)
+                        signupInfo.SignupOrder = 0;
+                    else
+                        signupInfo.SignupOrder = (decimal)maxOrder + 1;
+                }
+            } catch(Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return;
             }
             InsertSingle(signupInfo);
         }
@@ -64,7 +71,7 @@ namespace DismantledBot
                         foreach (AutoDBFieldInformation info in allInfo)
                         {
                             object retrieved = reader[info.FieldData.FieldName];
-                            if(retrieved == DBNull.Value)
+                            if (retrieved == DBNull.Value)
                                 info.SetValue(myObj, null);
                             else
                                 info.SetValue(myObj, retrieved);
@@ -72,10 +79,11 @@ namespace DismantledBot
                         queryReturn.Add(myObj);
                     }
                 }
-            } catch(Exception e)
+            }
+            catch (Exception e)
             {
-                Utilities.PrintException(e);
-                throw e;
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return null;
             }
             return queryReturn;
         }
@@ -86,26 +94,40 @@ namespace DismantledBot
             AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
                 return 0;
-            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
-            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
-            using (var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
-                OracleTransaction transaction = connection.BeginTransaction();
-                query.Transaction = transaction;
-                int deletions = 0;
-                foreach(T obj in objects)
+                var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+                var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+                using (var connection = MakeConnection())
                 {
-                    query.Parameters.Clear();
-                    foreach (AutoDBField selection in scFields)
+                    connection.Open();
+                    OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                    OracleTransaction transaction = connection.BeginTransaction();
+                    query.Transaction = transaction;
+                    int deletions = 0;
+                    foreach (T obj in objects)
                     {
-                        query.Parameters.AddValue(obj, selection.FieldName);
+                        query.Parameters.Clear();
+                        foreach (AutoDBField selection in scFields)
+                        {
+                            query.Parameters.AddValue(obj, selection.FieldName);
+                        }
+                        
+                        try
+                        {
+                            deletions += query.ExecuteNonQuery();
+                        } catch (Exception e)
+                        {
+                            CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()} Sub-insertion: {e.Message}");
+                        }
                     }
-                    deletions += query.ExecuteNonQuery();
+                    transaction.Commit();
+                    return deletions;
                 }
-                transaction.Commit();
-                return deletions;
+            } catch(Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return 0;
             }
         }
 
@@ -114,17 +136,24 @@ namespace DismantledBot
             AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
                 return 0;
-            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
-            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
-                foreach(AutoDBField selection in scFields)
+                var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+                var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+                using (var connection = MakeConnection())
                 {
-                    query.Parameters.AddValue(obj, selection.FieldName);
+                    connection.Open();
+                    OracleCommand query = new OracleCommand($"DELETE FROM {table.TableName} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                    foreach (AutoDBField selection in scFields)
+                    {
+                        query.Parameters.AddValue(obj, selection.FieldName);
+                    }
+                    return query.ExecuteNonQuery();
                 }
-                return query.ExecuteNonQuery();
+            } catch(Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return 0;
             }
         }
 
@@ -133,33 +162,47 @@ namespace DismantledBot
             AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
                 return 0;
-            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
-            var upFields = allFields.Where(x => updatedFields != null && updatedFields.Contains(x.FieldName)).ToList();
-            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
-            if (Utilities.ContainsNoWriteField<T>(upFields.Select(x => x.FieldName)))
-                return 0;
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
-                OracleTransaction transaction = connection.BeginTransaction();
-                query.Transaction = transaction;
-                int modified = 0;
-                foreach(T obj in objects)
+                var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+                var upFields = allFields.Where(x => updatedFields != null && updatedFields.Contains(x.FieldName)).ToList();
+                var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+                if (Utilities.ContainsNoWriteField<T>(upFields.Select(x => x.FieldName)))
+                    return 0;
+                using (var connection = MakeConnection())
                 {
-                    query.Parameters.Clear();
-                    foreach (AutoDBField update in upFields)
+                    connection.Open();
+                    OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                    OracleTransaction transaction = connection.BeginTransaction();
+                    query.Transaction = transaction;
+                    int modified = 0;
+                    foreach (T obj in objects)
                     {
-                        query.Parameters.AddValue(obj, update.FieldName);
+                        query.Parameters.Clear();
+                        foreach (AutoDBField update in upFields)
+                        {
+                            query.Parameters.AddValue(obj, update.FieldName);
+                        }
+                        foreach (AutoDBField selection in scFields)
+                        {
+                            query.Parameters.AddValue(obj, selection.FieldName);
+                        }
+                        
+                        try
+                        {
+                            modified += query.ExecuteNonQuery();
+                        } catch (Exception e)
+                        {
+                            CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()} Sub-modification: {e.Message}");
+                        }
                     }
-                    foreach (AutoDBField selection in scFields)
-                    {
-                        query.Parameters.AddValue(obj, selection.FieldName);
-                    }
-                    modified += query.ExecuteNonQuery();
+                    transaction.Commit();
+                    return modified;
                 }
-                transaction.Commit();
-                return modified;
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return 0;
             }
         }
 
@@ -168,51 +211,73 @@ namespace DismantledBot
             AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
                 return 0;
-            var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
-            var upFields = allFields.Where(x => updatedFields != null && updatedFields.Contains(x.FieldName)).ToList();
-            var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
-            if (Utilities.ContainsNoWriteField<T>(upFields.Select(x => x.FieldName)))
-                return 0;
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
-                foreach(AutoDBField update in upFields)
+                var allFields = Utilities.GetAllAutoFieldsWithNoWrite<T>();
+                var upFields = allFields.Where(x => updatedFields != null && updatedFields.Contains(x.FieldName)).ToList();
+                var scFields = allFields.Where(x => selectionFields != null && selectionFields.Contains(x.FieldName)).ToList();
+                if (Utilities.ContainsNoWriteField<T>(upFields.Select(x => x.FieldName)))
+                    return 0;
+                using (var connection = MakeConnection())
                 {
-                    query.Parameters.AddValue(obj, update.FieldName);
+                    connection.Open();
+                    OracleCommand query = new OracleCommand($"UPDATE {table.TableName} SET {string.Join(", ", upFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))} WHERE {string.Join(" AND ", scFields.Select(x => $"{x.FieldName} = :{x.FieldName}"))}", connection);
+                    foreach (AutoDBField update in upFields)
+                    {
+                        query.Parameters.AddValue(obj, update.FieldName);
+                    }
+                    foreach (AutoDBField selection in scFields)
+                    {
+                        query.Parameters.AddValue(obj, selection.FieldName);
+                    }
+                    return query.ExecuteNonQuery();
                 }
-                foreach(AutoDBField selection in scFields)
-                {
-                    query.Parameters.AddValue(obj, selection.FieldName);
-                }
-                return query.ExecuteNonQuery();
+            } catch(Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return 0;
             }
         }
 
-        public int Insert<T>(HashSet<T> objects)
+        public int InsertMultiple<T>(HashSet<T> objects)
         {
             AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
                 return 0;
-            using (var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                var fields = Utilities.GetAllAutoFields<T>();
-                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields.Select(x => x.FieldName))}) VALUES ({string.Join(", ", fields.Select(x => $":{x.FieldName}"))})", connection);
-                OracleTransaction transaction = connection.BeginTransaction();
-                query.Transaction = transaction;
-                int rowsModified = 0;
-                foreach(T obj in objects)
+                using (var connection = MakeConnection())
                 {
-                    query.Parameters.Clear();
-                    foreach (AutoDBField f in fields)
+                    connection.Open();
+                    var fields = Utilities.GetAllAutoFields<T>();
+                    OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields.Select(x => x.FieldName))}) VALUES ({string.Join(", ", fields.Select(x => $":{x.FieldName}"))})", connection);
+                    OracleTransaction transaction = connection.BeginTransaction();
+                    query.Transaction = transaction;
+                    int rowsModified = 0;
+                    foreach (T obj in objects)
                     {
-                        query.Parameters.AddValue(obj, f.FieldName);
+                        query.Parameters.Clear();
+                        foreach (AutoDBField f in fields)
+                        {
+                            query.Parameters.AddValue(obj, f.FieldName);
+                        }
+
+                        try
+                        {
+                            rowsModified += query.ExecuteNonQuery();
+                        } catch (Exception e)
+                        {
+                            CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()} Sub-insertion: {e.Message}");
+                            continue;
+                        }
                     }
-                    rowsModified += query.ExecuteNonQuery();
+                    transaction.Commit();
+                    return rowsModified;
                 }
-                transaction.Commit();
-                return rowsModified;
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return 0;
             }
         }
 
@@ -221,16 +286,23 @@ namespace DismantledBot
             AutoDBTable table = typeof(T).GetAutoTable();
             if (table == null)
                 return 0;
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                var fields = Utilities.GetAllAutoFields<T>();
-                OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields.Select(x => x.FieldName))}) VALUES ({string.Join(", ", fields.Select(x => $":{x.FieldName}"))})", connection);
-                foreach(AutoDBField f in fields)
+                using (var connection = MakeConnection())
                 {
-                    query.Parameters.AddValue(obj, f.FieldName);
+                    connection.Open();
+                    var fields = Utilities.GetAllAutoFields<T>();
+                    OracleCommand query = new OracleCommand($"INSERT INTO {table.TableName} ({string.Join(", ", fields.Select(x => x.FieldName))}) VALUES ({string.Join(", ", fields.Select(x => $":{x.FieldName}"))})", connection);
+                    foreach (AutoDBField f in fields)
+                    {
+                        query.Parameters.AddValue(obj, f.FieldName);
+                    }
+                    return query.ExecuteNonQuery();
                 }
-                return query.ExecuteNonQuery();
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                return 0;
             }
         }
 
@@ -241,57 +313,64 @@ namespace DismantledBot
                 return null;
 
             HashSet<T> allRows = new HashSet<T>(comparer);
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand query = new OracleCommand($"Select * From {table.TableName}", connection);
-                using (OracleDataReader reader = query.ExecuteReader())
+                using (var connection = MakeConnection())
                 {
-                    while (reader.Read())
+                    connection.Open();
+                    OracleCommand query = new OracleCommand($"Select * From {table.TableName}", connection);
+                    using (OracleDataReader reader = query.ExecuteReader())
                     {
-                        T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
-                        foreach (PropertyInfo property in typeof(T).GetProperties())
+                        while (reader.Read())
                         {
-                            AutoDBField autoField = property.GetAutoField();
-                            if (autoField == null)
-                                continue;
-                            string name = autoField.FieldName ?? property.Name;
-                            if (reader.IsDBNull(name))
+                            T myObj = (T)typeof(T).GetConstructor(new Type[] { }).Invoke(null);
+                            foreach (PropertyInfo property in typeof(T).GetProperties())
                             {
-                                property.SetValue(myObj, null);
-                                continue;
-                            }
+                                AutoDBField autoField = property.GetAutoField();
+                                if (autoField == null)
+                                    continue;
+                                string name = autoField.FieldName ?? property.Name;
+                                if (reader.IsDBNull(name))
+                                {
+                                    property.SetValue(myObj, null);
+                                    continue;
+                                }
 
-                            object val = reader[name];
-                            val = Convert.ChangeType(val, property.PropertyType);
-                            property.SetValue(myObj, val);
-                        }
-                        foreach (FieldInfo field in typeof(T).GetFields())
-                        {
-                            AutoDBField autoField = field.GetAutoField();
-                            if (autoField == null)
-                                continue;
-                            string name = autoField.FieldName ?? field.Name;
-                            if (reader.IsDBNull(name))
+                                object val = reader[name];
+                                val = Convert.ChangeType(val, property.PropertyType);
+                                property.SetValue(myObj, val);
+                            }
+                            foreach (FieldInfo field in typeof(T).GetFields())
                             {
-                                field.SetValue(myObj, null);
-                                continue;
-                            }
+                                AutoDBField autoField = field.GetAutoField();
+                                if (autoField == null)
+                                    continue;
+                                string name = autoField.FieldName ?? field.Name;
+                                if (reader.IsDBNull(name))
+                                {
+                                    field.SetValue(myObj, null);
+                                    continue;
+                                }
 
-                            object val = reader[name];
-                            val = Convert.ChangeType(val, field.FieldType);
-                            field.SetValue(myObj, val);
+                                object val = reader[name];
+                                val = Convert.ChangeType(val, field.FieldType);
+                                field.SetValue(myObj, val);
+                            }
+                            allRows.Add(myObj);
                         }
-                        allRows.Add(myObj);
                     }
-                }                                
+                }
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
+                allRows.Clear();
             }
             return allRows;
         }
 
         public HashSet<T> GetRows<T>(IEqualityComparer<T> comparer, Predicate<T> search)
         {
-            HashSet<T> rSet = GetRows<T>(comparer);
+            HashSet<T> rSet = GetRows(comparer);
             if (rSet == null)
                 return new HashSet<T>();
             return rSet.Where(x => search(x)).ToHashSet();
@@ -300,37 +379,55 @@ namespace DismantledBot
         #endregion
         public void RemoveUser(GuildMember user)
         {
-            using(var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
-                removeCommand.Parameters.AddValue(user, "RAWDiscordID");
-                removeCommand.ExecuteNonQuery();
+                using (var connection = MakeConnection())
+                {
+                    connection.Open();
+                    OracleCommand removeCommand = new OracleCommand("DELETE FROM GuildMembers WHERE DiscordID = :DiscordID", connection);
+                    removeCommand.Parameters.AddValue(user, "RAWDiscordID");
+                    removeCommand.ExecuteNonQuery();
+                }
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
             }
         }
 
         public void AddUser(GuildMember user)
         {
-            using (var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
-                insertCommand.Parameters.AddValue(user, "RAWDiscordID");
-                insertCommand.Parameters.AddValue(user, "Username");
-                insertCommand.Parameters.AddValue(user, "Nickname");
-                insertCommand.ExecuteNonQuery();
+                using (var connection = MakeConnection())
+                {
+                    connection.Open();
+                    OracleCommand insertCommand = new OracleCommand("INSERT INTO GuildMembers (DiscordID, Username, Nickname) VALUES (:DiscordID, :Username, :Nickname)", connection);
+                    insertCommand.Parameters.AddValue(user, "RAWDiscordID");
+                    insertCommand.Parameters.AddValue(user, "Username");
+                    insertCommand.Parameters.AddValue(user, "Nickname");
+                    insertCommand.ExecuteNonQuery();
+                }
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
             }
         }
 
         public void UpdateUser(GuildMember user)
         {
-            using (var connection = MakeConnection())
+            try
             {
-                connection.Open();
-                OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
-                updateCommand.Parameters.AddValue(user, "Nickname");
-                updateCommand.Parameters.AddValue(user, "RAWDiscordID");
-                updateCommand.ExecuteNonQuery();
+                using (var connection = MakeConnection())
+                {
+                    connection.Open();
+                    OracleCommand updateCommand = new OracleCommand("UPDATE GuildMembers SET Nickname = :Nickname WHERE DiscordID = :DiscordID", connection);
+                    updateCommand.Parameters.AddValue(user, "Nickname");
+                    updateCommand.Parameters.AddValue(user, "RAWDiscordID");
+                    updateCommand.ExecuteNonQuery();
+                }
+            } catch (Exception e)
+            {
+                CoreProgram.logger.Write2(Logger.MAJOR, $"{Utilities.GetMethod()}: {e.Message}");
             }
         }
 

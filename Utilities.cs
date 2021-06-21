@@ -44,6 +44,11 @@ namespace DismantledBot
     {
         private static Random Random = new Random();
 
+        public static T GetFirst<T>(this IEnumerable<T> self)
+        {
+            return self.Count() == 0 ? default : self.ElementAt(0);
+        }
+
         public static T Find<T>(this HashSet<T> self, Func<T, bool> predicate)
         {
             var predWhere = self.Where(predicate);

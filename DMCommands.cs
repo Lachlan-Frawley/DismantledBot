@@ -50,7 +50,7 @@ namespace DismantledBot
                     var allTeamMembers = allGuildMembers.Where(x => x.RoleIds.Contains((ulong)team.TeamRole));
                     allTeamMembers.ToList().ForEach(x => teamMembers.Add(new TeamMember((ulong)team.TeamID, x.Id)));
                 }
-                CoreProgram.database.Insert(teamMembers);
+                CoreProgram.database.InsertMultiple(teamMembers);
                 await ReplyAsync("Teams successfully synchronised!");
             }
 
@@ -141,7 +141,54 @@ namespace DismantledBot
 
         [IsBotAdmin]
         public sealed class PrivilegedL3Commands : ModuleBase<SocketCommandContext>
-        {            
+        {           
+            [Command("player team")]
+            public async Task CheckPlayerTeam(ulong id)
+            {
+                TeamMember teamUser = CoreProgram.database.GetRows(new TeamMember.Comparer(), x => x.DiscordID == id).GetFirst();
+                if (teamUser == null)
+                    await ReplyAsync("Player is not in a team!");
+                else
+                    await ReplyAsync($"Player is in team {teamUser.Team.TeamName}!");
+            }
+
+            [Command("add previous signup")]
+            public async Task AddPrevSignupByName(DateTime eventDate, string fuzzyName)
+            {
+                HashSet<GuildMember> foundMembers = CoreProgram.database.PerformSelection<GuildMember>($"Select * From {typeof(GuildMember).GetAutoTable().TableName} Where Username LIKE '%{fuzzyName}%' OR Nickname LIKE '%{fuzzyName}%'");
+                if (foundMembers == null || foundMembers.Count == 0)
+                {
+                    await ReplyAsync($"Could not locate user with name like [{fuzzyName}]!");                    
+                } else if(foundMembers.Count == 1)
+                {
+                    await AddPreviousSignup(eventDate, foundMembers.GetFirst().DiscordID);
+                } else
+                {
+                    await ReplyAsync($"Multiple members found with matching names:\n{string.Join(",\n", lastSelection.Select(x => $"{x.Name} -> {x.DiscordID}"))}");
+                }
+            }
+            
+            [Command("add previous signup")]
+            public async Task AddPreviousSignup(DateTime eventDate, ulong id)
+            {
+                PreviousEventData previousEvent = CoreProgram.database.GetRows(new PreviousEventData.Comparer(), x => x.EventDate == eventDate).GetFirst();
+                if(previousEvent == null)
+                {
+                    await ReplyAsync("Could not find event with given date");
+                    return;
+                }               
+
+                PreviousEventSignupData overrideData = new PreviousEventSignupData(new CurrentEventSignupData()
+                {
+                    DiscordID = id,
+                    EventDate = eventDate,
+                    SignupOrder = 0
+                }, "UNKNOWN");
+
+                CoreProgram.database.InsertSingle(overrideData);
+                await ReplyAsync("Inserted previous signup data!");
+            }
+
             [Command("debug signup")]
             public async Task DebugSignup(ulong messageId, ulong categoryID)
             {

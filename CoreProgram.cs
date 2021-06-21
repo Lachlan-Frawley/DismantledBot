@@ -155,22 +155,17 @@ namespace DismantledBot
                     var preTeamRoles = preRoles.Where(x => teamRoles.Contains(x));
                     var postTeamRoles = postRoles.Where(x => teamRoles.Contains(x));
 
-                    var removedTeamRoles = preTeamRoles.Except(postTeamRoles);
                     var addedTeamRoles = postTeamRoles.Except(preTeamRoles);
 
-                    if (removedTeamRoles.Count() + addedTeamRoles.Count() != 0)
+                    if (addedTeamRoles.Count() != 0)
                     {
-                        foreach (ulong removedRole in removedTeamRoles)
-                        {
-                            CoreProgram.database.DeleteSingle(new TeamMember(removedRole, after.Id), "TeamID", "DiscordID");
-                        }
                         foreach (ulong addedRole in addedTeamRoles)
                         {
                             CoreProgram.database.InsertSingle(new TeamMember(addedRole, after.Id));
                         }
                     }
 
-                    CoreProgram.logger.Write2(Logger.DEBUG, $"Modified {after}, added {addedTeamRoles.Count()} team roles, removed {removedTeamRoles.Count()} team roles...");
+                    CoreProgram.logger.Write2(Logger.DEBUG, $"Modified {after}, added {addedTeamRoles.Count()} team roles");
                 } catch(Exception e)
                 {
                     CoreProgram.logger.Write2(Logger.WARNING, e.Message);
